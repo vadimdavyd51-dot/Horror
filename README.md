@@ -16,7 +16,9 @@
 src/index.html        приложение целиком (разметка, стили, скрипт)
 scripts/build.mjs     сборка: src/index.html -> dist/index.html
 scripts/serve.mjs     локальный сервер для проверки сборки
-.github/workflows/    автосборка и публикация на GitHub Pages
+.github/workflows/    apk.yml (сборка APK), pages.yml (веб-версия)
+capacitor.config.json настройки Android-приложения
+scripts/android-setup.mjs  разрешение на микрофон в манифесте
 ```
 
 ## Сборка и запуск
@@ -28,8 +30,16 @@ npm run build   # создаёт dist/index.html
 npm start       # http://localhost:8080
 ```
 
-## Публикация на телефон
+## APK для Android
 
-После пуша в `main` GitHub Actions собирает проект и публикует его на GitHub Pages. Один раз включите Pages: Settings → Pages → Source: GitHub Actions. Адрес будет вида `https://<логин>.github.io/horror/`.
+APK собирает GitHub Actions (workflow «Build APK»): приложение упаковывается через Capacitor, на выходе отладочный APK. Запускается при каждом пуше в `main` и вручную (Actions → Build APK → Run workflow).
 
-Микрофон работает только на странице, открытой по https (GitHub Pages подходит).
+Готовый файл появляется на странице Releases (метка `apk-latest`): `Rasskazchik.apk`. Скачайте его на телефон, откройте и разрешите установку из этого источника. Телефон может предупредить о неизвестном приложении, это нормально для отладочной сборки.
+
+В APK работает микрофон (при первом включении телефон спросит разрешение) и сохранение ролика: после записи откроется меню «Поделиться», где можно сохранить файл в галерею или на диск.
+
+Локально APK не собирается: нужны Android SDK и доступ в сеть для npm и Gradle.
+
+## Веб-версия
+
+Workflow «Deploy to GitHub Pages» запускается вручную. Перед первым запуском включите Settings → Pages → Source: GitHub Actions. Микрофон на странице работает только по https, GitHub Pages подходит.

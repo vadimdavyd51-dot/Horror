@@ -1265,8 +1265,30 @@ body.clean .overlay.show { display: flex; }
     try { $("result").scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
   }
   $("closeRec").addEventListener("click", function () { $("result").hidden = true; $("preview").removeAttribute("src"); });
+  function isNative() { try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) { return false; } }
+  function toB64(buf) { var s = "", u = new Uint8Array(buf); for (var i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }
+  function saveNative(blob, name) {
+    var FS = window.Capacitor.registerPlugin("Filesystem"), SH = window.Capacitor.registerPlugin("Share");
+    var CH = 3 * 1024 * 1024, pos = 0, uri = "";
+    setStatus("Готовлю файл…");
+    function next() {
+      if (pos >= blob.size) return Promise.resolve();
+      var part = blob.slice(pos, pos + CH), first = pos === 0; pos += CH;
+      return part.arrayBuffer().then(function (buf) {
+        var o = { path: name, data: toB64(buf), directory: "CACHE" };
+        return first ? FS.writeFile(o).then(function (r) { uri = r.uri; }) : FS.appendFile(o);
+      }).then(next);
+    }
+    next().then(function () { return SH.share({ title: "Ролик «Рассказчик»", files: [uri], dialogTitle: "Сохранить или отправить ролик" }); })
+      .then(function () { setStatus("Готово. Выберите, куда сохранить ролик."); })
+      .catch(function (e) {
+        var m = e && e.message ? String(e.message) : "";
+        setStatus(/cancel/i.test(m) ? "Сохранение отменено." : "Не удалось сохранить файл" + (m ? ": " + m : "."));
+      });
+  }
   $("saveRec").addEventListener("click", function () {
     if (!recBlob) return;
+    if (isNative()) { saveNative(recBlob, "rasskazchik-" + Date.now() + "." + recExt); return; }
     var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
     var name = "rasskazchik-" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + "." + recExt;
     var use = window.claude && window.claude.use ? window.claude.use("downloads") : Promise.resolve(null);
