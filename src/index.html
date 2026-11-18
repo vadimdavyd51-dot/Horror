@@ -1398,8 +1398,14 @@ body.clean .overlay.show { display: flex; }
     }
     return next();
   }
+  function plug(n) {
+    var C = window.Capacitor, p = C && C.Plugins && C.Plugins[n];
+    if (!p && C && typeof C.registerPlugin === "function") p = C.registerPlugin(n);
+    if (!p) throw new Error("плагин " + n + " недоступен");
+    return p;
+  }
   function saveNative(blob, name) {
-    var FS = window.Capacitor.registerPlugin("Filesystem"), SH = window.Capacitor.registerPlugin("Share");
+    var FS = plug("Filesystem"), SH = plug("Share");
     note("Готовлю файл…");
     writeChunks(FS, blob, name, "CACHE").then(function (uri) {
       note("Открываю меню «Поделиться»…");
