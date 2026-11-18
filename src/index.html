@@ -1150,10 +1150,12 @@ body.clean .overlay.show { display: flex; }
     if (!ctx || !amb.bus || [0, 1, 3, 5].indexOf(amb.idx) < 0) return;
     rumble(amb.bus, ctx.currentTime + 0.6 + Math.random() * 1.2, 3.4, 0.6);
   }
-  function fireSound(s, k) {
-    s.loop("b", "lowpass", 260, 0.5, 0.11 * k);
-    var h = s.loop("p", "bandpass", 1800, 0.4, 0.04 * k);
-    s.slow(h.gain.gain, 0.6, 0.02 * k); s.slow(h.gain.gain, 1.7, 0.012 * k);
+  function fireSound(s, k, clean) {
+    if (!clean) {
+      s.loop("b", "lowpass", 260, 0.5, 0.11 * k);
+      var h = s.loop("p", "bandpass", 1800, 0.4, 0.04 * k);
+      s.slow(h.gain.gain, 0.6, 0.02 * k); s.slow(h.gain.gain, 1.7, 0.012 * k);
+    }
     s.every(60, 420, function () {
       var t = now0(), r = Math.random();
       if (r < 0.07) { burst(s.g, t, 0.035, 0.45 * k, "bandpass", rnd(900, 1400), 0.9); burst(s.g, t, 0.08, 0.25 * k, "lowpass", 320, 0.7); }
@@ -1163,31 +1165,20 @@ body.clean .overlay.show { display: flex; }
   }
 
   var REVERB = [0.14, 0.5, 0.6, 0.45, 0.4, 0.6];
-  var TRIM = [0.4, 0.7, 1.0, 0.4, 1.4, 1.25]; // выравнивание громкости между локациями
+  var TRIM = [0.4, 1.1, 1.0, 0.4, 1.4, 1.25]; // выравнивание громкости между локациями
   var SCENES = [
     // 0. Комната у камина
     function (s) {
-      fireSound(s, 1);
-      s.wind(0.02, 320);
+      fireSound(s, 1, true); // только потрескивание камина (и гром за окном)
       return s;
     },
-    // 1. Детская: звон бубенцов и погремушек, музыкальная шкатулка, скрип лошадки
+    // 1. Детская: звон бубенцов, погремушки и музыкальная шкатулка
     function (s) {
-      s.loop("p", "lowpass", 500, 0.4, 0.012);
       s.every(3200, 8500, function () {
         var t = now0(), r = Math.random();
         if (r < 0.5) { var n = 4 + Math.floor(Math.random() * 6), tt = t, gap = rnd(0.04, 0.07), v = rnd(0.07, 0.11); for (var i = 0; i < n; i++) { clink(s.g, tt, v * (1 - i / (n + 2)), 2300, 4200); tt += gap * rnd(0.7, 1.6); gap *= 1.08; } }
         else if (r < 0.85) { var N = [1175, 1319, 1568, 1760, 2093], k = 2 + Math.floor(Math.random() * 3), t2 = t, f = pick(N); for (var j = 0; j < k; j++) { pluck(s.g, t2, f * (1 + rnd(-0.015, 0.015)), 0.07); f = pick(N); t2 += rnd(0.32, 0.55); } }
         else { for (var m = 0; m < 3; m++) clink(s.g, t + m * rnd(0.12, 0.3), 0.06, 3000, 5200); }
-      });
-      s.every(8000, 17000, function () {
-        var t = now0(), n = 8 + Math.floor(Math.random() * 7);
-        for (var i = 0; i < n; i++) burst(s.g, t + i * rnd(0.025, 0.045), 0.02, 0.1 * (1 - i / (n + 3)), "bandpass", rnd(4500, 7000), 1.6);
-      });
-      var prev = Math.sin(performance.now() / 850) > 0;
-      s.poll(40, function () {
-        var c2 = Math.sin(performance.now() / 850) > 0;
-        if (c2 !== prev) { prev = c2; playBuf(s.g, pick(CREAKS), now0(), 0.1, rnd(1.1, 1.4)); }
       });
       return s;
     },
@@ -1265,16 +1256,8 @@ body.clean .overlay.show { display: flex; }
       s.every(10000, 24000, function () { var t = now0(); tone(s.g, "sine", 880, 0, t, 0.14, 0.03, 0.005); tone(s.g, "sine", 880, 0, t + 0.34, 0.14, 0.03, 0.005); });
       return s;
     },
-    // 5. Чердак: скрип досок, ветер под крышей
+    // 5. Чердак: только гром за окном (он идёт из общего цикла молний)
     function (s) {
-      s.wind(0.05, 420);
-      s.every(3200, 8500, function () {
-        var t = now0(), v = rnd(0.22, 0.34);
-        playBuf(s.g, pick(CREAKS), t, v, rnd(0.85, 1.2));
-        if (Math.random() < 0.4) playBuf(s.g, pick(CREAKS), t + rnd(0.45, 1.0), v * 0.7, rnd(0.9, 1.3));
-        if (Math.random() < 0.25) burst(s.g, t + rnd(0.8, 1.4), 0.08, 0.12, "lowpass", 230, 0.8);
-      });
-      s.every(20000, 40000, function () { burst(s.g, now0(), 0.1, 0.18, "lowpass", 220, 0.8); });
       return s;
     }
   ];
