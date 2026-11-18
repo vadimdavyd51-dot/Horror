@@ -1,0 +1,1384 @@
+<title>Рассказчик у камина</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<style>
+/* Layout: сцена 16:9 сверху, ниже панель: локации, озвучка, запись. Режим съёмки оставляет только сцену. */
+:root {
+  --bg: #0e0807;
+  --panel: #1a100e;
+  --line: #3b2722;
+  --fg: #f2e5d7;
+  --muted: #ae9482;
+  --accent: #ff9a3c;
+  --accent-fg: #1c0d04;
+  --rec: #e5484d;
+  --display: "IM Fell English SC", Georgia, "Times New Roman", serif;
+  --body: "Inter", system-ui, -apple-system, "Segoe UI", sans-serif;
+  color-scheme: dark;
+}
+* { box-sizing: border-box; }
+body {
+  background: var(--bg);
+  color: var(--fg);
+  font-family: var(--body);
+  font-size: 15px;
+  line-height: 1.5;
+  padding-block: 16px 28px;
+  padding-left: max(16px, env(safe-area-inset-left, 0px));
+  padding-right: max(16px, env(safe-area-inset-right, 0px));
+}
+.wrap { max-width: 1100px; margin: 0 auto; display: flex; flex-direction: column; gap: 14px; }
+h1 {
+  font-family: var(--display);
+  font-weight: 400;
+  font-size: clamp(22px, 5vw, 32px);
+  letter-spacing: 0.04em;
+  margin: 0;
+  text-wrap: balance;
+}
+.stage {
+  width: 100%;
+  aspect-ratio: 16 / 9;
+  background: #000;
+  border-radius: 14px;
+  overflow: hidden;
+  position: relative;
+  border: 1px solid var(--line);
+}
+.stage canvas { display: block; width: 100%; height: 100%; object-fit: contain; }
+.panel {
+  background: var(--panel);
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 14px;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.row { display: flex; flex-wrap: wrap; gap: 10px; align-items: center; }
+.btn {
+  appearance: none;
+  border: 1px solid var(--line);
+  background-color: #261714;
+  color: var(--fg);
+  font: inherit;
+  font-weight: 600;
+  padding: 10px 16px;
+  border-radius: 10px;
+  cursor: pointer;
+  min-height: 44px;
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+}
+.btn:hover { border-color: var(--accent); }
+.btn:focus-visible, input[type=range]:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.btn.primary { background-color: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.btn.rec { border-color: var(--rec); }
+.btn.rec.on { background-color: var(--rec); color: #fff; }
+.btn[disabled] { opacity: 0.45; cursor: not-allowed; }
+.btn.on { border-color: var(--accent); box-shadow: inset 0 0 0 1px var(--accent); }
+.chips { display: flex; flex-wrap: wrap; gap: 8px; }
+.chip {
+  appearance: none;
+  font: inherit;
+  font-size: 14px;
+  font-weight: 600;
+  color: var(--fg);
+  background-color: #261714;
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 8px 14px;
+  min-height: 40px;
+  cursor: pointer;
+}
+.chip[aria-pressed="true"] { background-color: var(--accent); color: var(--accent-fg); border-color: var(--accent); }
+.chip:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.grow { flex: 1 1 180px; min-width: 0; display: flex; align-items: center; gap: 10px; }
+.grow input[type=range] { flex: 1; min-width: 0; }
+label.small, .cap { color: var(--muted); font-size: 13px; white-space: nowrap; }
+.cap { font-weight: 600; letter-spacing: 0.04em; text-transform: uppercase; font-size: 12px; }
+input[type=range] { accent-color: var(--accent); height: 28px; }
+input[type=file] { position: absolute; width: 1px; height: 1px; opacity: 0; pointer-events: none; }
+.status { margin: 0; color: var(--muted); font-size: 14px; min-height: 1.5em; }
+.time { font-variant-numeric: tabular-nums; color: var(--muted); font-size: 13px; min-width: 88px; text-align: right; }
+.result video { width: 100%; max-height: 60vh; background: #000; border-radius: 10px; }
+
+body.clean { overflow: hidden; padding: 0; }
+body.clean .ui { display: none; }
+body.clean .stage { position: fixed; inset: 0; max-width: none; aspect-ratio: auto; border-radius: 0; border: 0; z-index: 20; }
+.overlay {
+  position: absolute;
+  left: 50%;
+  bottom: max(20px, env(safe-area-inset-bottom, 0px));
+  transform: translateX(-50%);
+  display: none;
+  flex-wrap: wrap;
+  justify-content: center;
+  gap: 10px;
+  z-index: 30;
+  width: max-content;
+  max-width: 96%;
+}
+body.clean .overlay.show { display: flex; }
+</style>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=IM+Fell+English+SC&family=Inter:wght@400;600&display=swap">
+
+<div class="wrap">
+  <h1 class="ui">Рассказчик у камина</h1>
+
+  <div class="stage" id="stage">
+    <canvas id="cv" width="1920" height="1080" role="img" aria-label="Мультяшный рассказчик в кресле. Фон меняется: камин, детская, подвал, лес, больница, чердак"></canvas>
+    <div class="overlay" id="overlay">
+      <button class="btn primary" id="ovPlay" type="button">Пуск</button>
+      <button class="btn" id="ovLoc" type="button">Следующая локация</button>
+      <button class="btn" id="ovExit" type="button">Выйти из режима съёмки</button>
+    </div>
+  </div>
+
+  <section class="panel ui" aria-label="Управление">
+    <span class="cap">Локация</span>
+    <div class="chips" id="chips"></div>
+
+    <span class="cap">Озвучка</span>
+    <div class="row">
+      <label class="btn primary" for="file" id="fileBtn">Загрузить озвучку</label>
+      <input type="file" id="file" accept="audio/*,.mp3,.wav,.m4a,.ogg,.aac,.flac">
+      <button class="btn" id="play" type="button" disabled>Пуск</button>
+      <div class="grow">
+        <input type="range" id="seek" min="0" max="1000" value="0" disabled aria-label="Перемотка">
+        <span class="time" id="time">0:00 / 0:00</span>
+      </div>
+    </div>
+    <div class="row">
+      <button class="btn" id="mic" type="button">Говорить в микрофон</button>
+      <button class="btn" id="test" type="button">Проверить рот</button>
+      <div class="grow">
+        <label class="small" for="sens">Чувствительность</label>
+        <input type="range" id="sens" min="1" max="10" value="5">
+      </div>
+    </div>
+
+    <span class="cap">Звуки локации</span>
+    <div class="row">
+      <button class="btn on" id="amb" type="button" aria-pressed="true">Звуки: вкл</button>
+      <div class="grow">
+        <label class="small" for="vol">Громкость</label>
+        <input type="range" id="vol" min="0" max="100" value="60">
+      </div>
+    </div>
+
+    <span class="cap">Видео</span>
+    <div class="row">
+      <button class="btn rec" id="rec" type="button">Записать ролик</button>
+      <button class="btn" id="clean" type="button">Режим съёмки</button>
+    </div>
+    <p class="status" id="status" role="status" aria-live="polite">Загрузите файл озвучки, и рассказчик начнёт говорить вместе с ним. Звуки локации включатся после первого касания страницы.</p>
+  </section>
+
+  <section class="panel ui result" id="result" hidden aria-label="Готовый ролик">
+    <video id="preview" controls playsinline></video>
+    <div class="row">
+      <button class="btn primary" id="saveRec" type="button">Сохранить ролик</button>
+      <button class="btn" id="closeRec" type="button">Закрыть</button>
+      <span class="status" id="recInfo"></span>
+    </div>
+  </section>
+</div>
+
+<script>
+(function () {
+  "use strict";
+  var $ = function (id) { return document.getElementById(id); };
+  var W = 1280, H = 720, SC = 1.5, TAU = Math.PI * 2;
+  var cv = $("cv"), g = cv.getContext("2d");
+  var bgc = document.createElement("canvas");
+  bgc.width = W * SC; bgc.height = H * SC;
+  var bx = bgc.getContext("2d");
+
+  /* ===================== рисовальные помощники ===================== */
+  function rng(seed) { return function () { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; }; }
+  function rr(c, x, y, w, h, r) { c.beginPath(); if (r && c.roundRect) c.roundRect(x, y, w, h, r); else c.rect(x, y, w, h); }
+  function R(c, x, y, w, h, f, r) { rr(c, x, y, w, h, r); c.fillStyle = f; c.fill(); }
+  function E(c, x, y, rx, ry, f, rot) { c.beginPath(); c.ellipse(x, y, Math.max(rx, 0.01), Math.max(ry, 0.01), rot || 0, 0, TAU); c.fillStyle = f; c.fill(); }
+  function PF(c, d, f) { c.fillStyle = f; c.fill(new Path2D(d)); }
+  function PS(c, d, s, lw) { c.strokeStyle = s; c.lineWidth = lw; c.lineCap = "round"; c.lineJoin = "round"; c.stroke(new Path2D(d)); }
+  function poly(c, pts, f, s, lw) {
+    c.beginPath(); c.moveTo(pts[0][0], pts[0][1]);
+    for (var i = 1; i < pts.length; i++) c.lineTo(pts[i][0], pts[i][1]);
+    c.closePath();
+    if (f) { c.fillStyle = f; c.fill(); }
+    if (s) { c.strokeStyle = s; c.lineWidth = lw || 1; c.stroke(); }
+  }
+  function LG(c, x0, y0, x1, y1, st) { var gr = c.createLinearGradient(x0, y0, x1, y1); st.forEach(function (s) { gr.addColorStop(s[0], s[1]); }); return gr; }
+  function rgba(rgb, a) { return "rgba(" + rgb[0] + "," + rgb[1] + "," + rgb[2] + "," + a + ")"; }
+  function glow(c, x, y, r, rgb, alpha, mode) {
+    if (alpha <= 0.001) return;
+    c.save();
+    c.globalCompositeOperation = mode || "screen";
+    c.globalAlpha = Math.min(1, alpha);
+    var gr = c.createRadialGradient(x, y, 0, x, y, r);
+    gr.addColorStop(0, rgba(rgb, 1)); gr.addColorStop(0.45, rgba(rgb, 0.35)); gr.addColorStop(1, rgba(rgb, 0));
+    c.fillStyle = gr; c.fillRect(x - r, y - r, r * 2, r * 2);
+    c.restore();
+  }
+  function lerp(a, b, u) { return a + (b - a) * u; }
+  function clamp(v, a, b) { return v < a ? a : v > b ? b : v; }
+
+  var FLAME = new Path2D("M-28 0 C-40 -50 -12 -80 -6 -150 C14 -100 44 -60 28 0Z");
+  var CAND = new Path2D("M-5 0 C-8 -10 -2 -16 0 -26 C4 -16 9 -10 5 0Z");
+  var KF = [[0, 1, 1, 0], [0.25, 0.9, 1.12, 3], [0.5, 1.08, 0.93, -4], [0.75, 0.95, 1.1, 2], [1, 1, 1, 0]];
+  function flick(ph) {
+    ph = ph - Math.floor(ph);
+    for (var i = 0; i < 4; i++) {
+      var a = KF[i], b = KF[i + 1];
+      if (ph <= b[0]) { var u = (ph - a[0]) / (b[0] - a[0]); return [lerp(a[1], b[1], u), lerp(a[2], b[2], u), lerp(a[3], b[3], u)]; }
+    }
+    return [1, 1, 0];
+  }
+  function flame(c, t, x, y, s, col, dur, off, path) {
+    var k = flick((t / 1000 + off) / dur);
+    c.save(); c.translate(x, y); c.scale(s, s);
+    c.transform(k[0], 0, Math.tan(k[2] * 0.01745), k[1], 0, 0);
+    c.fillStyle = col; c.fill(path || FLAME); c.restore();
+  }
+  function fireStack(c, t, cx, cy, k) {
+    flame(c, t, cx - 45 * k, cy - 2 * k, 0.9 * k, "#e0501a", 0.95, 0.2);
+    flame(c, t, cx + 45 * k, cy - 2 * k, 0.85 * k, "#e0501a", 1.1, 0.6);
+    flame(c, t, cx, cy, 1.15 * k, "#f07a1e", 0.85, 0.4);
+    flame(c, t, cx - 22 * k, cy - 2 * k, 0.8 * k, "#ffa229", 0.75, 0.1);
+    flame(c, t, cx + 26 * k, cy - 2 * k, 0.75 * k, "#ffa229", 0.9, 0.7);
+    flame(c, t, cx, cy, 0.7 * k, "#ffe07a", 0.7, 0.3);
+  }
+  function embers(c, t, cx, cy, n, rise) {
+    for (var i = 0; i < n; i++) {
+      var ph = ((t / 1000 + i * 0.7) / 3.4) % 1;
+      var a = ph < 0.15 ? ph / 0.15 : 1 - (ph - 0.15) / 0.85;
+      c.fillStyle = "rgba(255,179,71," + clamp(a, 0, 1).toFixed(2) + ")";
+      c.beginPath(); c.arc(cx + ((i * 37) % 70) - 35 + 24 * ph, cy - (rise || 190) * ph - (i % 3) * 14, 2 + (i % 3) * 0.5, 0, TAU); c.fill();
+    }
+  }
+
+  /* ===================== кресло и рассказчик ===================== */
+  function chair(c) {
+    E(c, 330, 640, 260, 26, "rgba(0,0,0,.4)");
+    R(c, 150, 196, 360, 410, "#521a22", 64);
+    R(c, 190, 236, 280, 340, "#68222c", 44);
+    [[260, 300], [400, 300], [260, 420], [400, 420]].forEach(function (p) { E(c, p[0], p[1], 5, 5, "#3d1118"); });
+    R(c, 118, 380, 96, 236, "#45131a", 44);
+    R(c, 446, 380, 96, 236, "#45131a", 44);
+    R(c, 130, 372, 72, 40, "#5b1a23", 20);
+    R(c, 458, 372, 72, 40, "#5b1a23", 20);
+    R(c, 168, 548, 324, 84, "#68222c", 32);
+    R(c, 140, 612, 22, 30, "#1b0c08", 6);
+    R(c, 498, 612, 22, 30, "#1b0c08", 6);
+  }
+
+  function drawMan(c, m) {
+    // ноги
+    R(c, 236, 540, 188, 66, "#262a35", 30);
+    R(c, 246, 590, 74, 96, "#2d3240", 24);
+    R(c, 340, 590, 74, 96, "#2d3240", 24);
+    E(c, 283, 694, 46, 16, "#120c0a");
+    E(c, 377, 694, 46, 16, "#120c0a");
+    // торс
+    c.save();
+    c.translate(0, 568 * (1 - m.br)); c.scale(1, m.br);
+    PF(c, "M246 408 Q330 372 414 408 L432 568 L228 568 Z", "#3d5a4a");
+    PS(c, "M330 392 V568", "#2c4337", 3);
+    PF(c, "M300 380 L330 410 L360 380 Z", "#e9dfcf");
+    [440, 480, 520].forEach(function (y) { E(c, 330, y, 4, 4, "#e9dfcf"); });
+    PS(c, "M258 418 Q224 470 212 520 L188 514", "#3d5a4a", 44);
+    PS(c, "M402 418 Q436 470 448 520 L472 514", "#3d5a4a", 44);
+    E(c, 184, 512, 21, 21, "#e9b98f");
+    E(c, 476, 512, 21, 21, "#e9b98f");
+    c.restore();
+    R(c, 304, 346, 52, 46, "#d49f78", 10);
+
+    // голова
+    c.save();
+    c.translate(0, m.bob); c.translate(330, 362); c.rotate(m.tilt * 0.01745); c.translate(-330, -362);
+    E(c, 272, 302, 11, 16, "#d9a67c");
+    E(c, 388, 302, 11, 16, "#d9a67c");
+    E(c, 330, 298, 58, 68, "#e9b98f");
+    E(c, 330, 298, 58, 68, LG(c, 272, 0, 388, 0, [[0, "rgba(0,0,0,.35)"], [0.6, "rgba(0,0,0,0)"]]));
+    PF(c, "M266 290 Q256 214 330 212 Q406 214 394 290 Q384 250 330 246 Q276 250 266 290Z", "#2a1a14");
+    PF(c, "M300 222 Q326 196 356 218 Q336 214 322 226Z", "#2a1a14");
+    c.save(); c.translate(0, -m.open * 2.5);
+    PS(c, "M287 268 Q303 260 320 268", "#2a1a14", 4.5);
+    PS(c, "M340 268 Q357 260 373 268", "#2a1a14", 4.5);
+    c.restore();
+    E(c, 304, 290, 11, 8, "#f6f0e6"); E(c, 356, 290, 11, 8, "#f6f0e6");
+    E(c, 305 + m.look, 291, 4.6, 4.6, "#1b1410"); E(c, 357 + m.look, 291, 4.6, 4.6, "#1b1410");
+    [304, 356].forEach(function (cx) {
+      c.save(); c.translate(cx, 280.5); c.scale(1, m.blink); c.translate(-cx, -280.5);
+      E(c, cx, 290, 12.5, 9.5, "#e9b98f"); c.restore();
+    });
+    c.strokeStyle = "#17110e"; c.lineWidth = 3;
+    c.beginPath(); c.arc(304, 290, 17, 0, TAU); c.stroke();
+    c.beginPath(); c.arc(356, 290, 17, 0, TAU); c.stroke();
+    PS(c, "M321 288 Q330 283 339 288", "#17110e", 3);
+    PS(c, "M290 280 Q297 272 308 273", "rgba(255,255,255,.18)", 2);
+    PS(c, "M330 296 Q322 318 333 321", "#c48b63", 3);
+    // рот
+    var h = m.h, rx = m.rx;
+    if (h >= 1.2) {
+      var cy = 336 + h / 2;
+      E(c, 330, cy, rx, h / 2, "#3a0f12");
+      c.save(); c.beginPath(); c.ellipse(330, cy, rx, h / 2, 0, 0, TAU); c.clip();
+      R(c, 330 - rx * 0.8, 336, rx * 1.6, Math.min(5.5, h * 0.55), "#f4efe6");
+      E(c, 330, 336 + h * 0.85, rx * 0.55, Math.max(0, h * 0.3), "#c4545a");
+      c.restore();
+      PS(c, "M" + (330 - rx) + " 337 Q330 " + (336 + 2 * h + 4) + " " + (330 + rx) + " 337", "#a45a43", 3.2);
+    } else {
+      PS(c, "M" + (330 - rx) + " 337 Q330 341 " + (330 + rx) + " 337", "#a45a43", 3.2);
+    }
+    PF(c, "M306 328 Q318 318 330 324 Q342 318 354 328 Q342 331 330 327 Q318 331 306 328Z", "#2a1a14");
+    PF(c, "M296 350 Q330 376 364 350 Q330 366 296 350Z", "rgba(42,26,20,.28)");
+    c.restore();
+  }
+
+  /* ===================== состояние сцены ===================== */
+  var S = { flash: 0 };
+
+  /* ----- 0. Комната у камина ----- */
+  var fireLoc = {
+    name: "Комната у камина",
+    bg: function (c) {
+      R(c, 0, 0, W, H, LG(c, 0, 0, 0, H, [[0, "#1b1210"], [1, "#2a1a15"]]));
+      for (var x = 0; x < W; x += 48) R(c, x, 0, 24, 560, "rgba(0,0,0,.12)");
+      R(c, 0, 548, W, 14, "#140b09"); R(c, 0, 562, W, 158, "#2b1810");
+      PS(c, "M0 600H1280M0 645H1280M0 695H1280", "#1a0e09", 3);
+      PS(c, "M220 562V600M640 562V600M1010 562V600M90 600V645M470 600V645M860 600V645M1180 600V645M300 645V695M760 645V695M1100 645V695", "#1a0e09", 3);
+      E(c, 380, 660, 350, 52, "#3a1717");
+      c.save(); c.setLineDash([14, 10]); c.beginPath(); c.ellipse(380, 660, 310, 42, 0, 0, TAU); c.strokeStyle = "#6b2d22"; c.lineWidth = 3; c.stroke(); c.restore();
+      // окно
+      R(c, 590, 100, 200, 230, "#0a0605", 6);
+      R(c, 602, 112, 176, 206, LG(c, 0, 112, 0, 318, [[0, "#16243a"], [1, "#0c1422"]]));
+      E(c, 700, 170, 26, 26, "rgba(217,221,230,.85)"); E(c, 710, 164, 22, 22, "rgba(22,36,58,.5)");
+      PF(c, "M602 250 Q640 225 680 245 Q720 220 778 250 V318 H602Z", "#0a111c");
+      PS(c, "M630 252 L640 215 L650 252 M690 248 L702 205 L714 248", "#05080e", 3);
+      PS(c, "M690 112V318M602 215H778", "#0a0605", 8);
+      R(c, 580, 326, 220, 14, "#150c09", 4);
+      // столик со свечой
+      R(c, 560, 500, 110, 12, "#241410", 5); R(c, 574, 512, 10, 90, "#1b0f0b"); R(c, 646, 512, 10, 90, "#1b0f0b");
+      R(c, 578, 486, 46, 14, "#5b2a1f"); R(c, 582, 478, 38, 8, "#7a3a2a");
+      R(c, 636, 462, 14, 38, "#e8dcc4"); E(c, 643, 462, 7, 2.5, "#cdbf9f");
+      // картина
+      R(c, 946, 104, 168, 138, "#3a2515", 4); R(c, 956, 114, 148, 118, "#0f1a18");
+      E(c, 1060, 150, 14, 14, "rgba(201,207,184,.8)");
+      PF(c, "M956 232V196L990 176L1024 196V232Z", "#050807");
+      PF(c, "M1040 232V200Q1060 170 1090 190L1104 200V232Z", "#070b0a");
+      R(c, 982, 200, 8, 10, "rgba(224,166,74,.8)");
+      // камин
+      R(c, 870, 296, 320, 332, "#3b3330");
+      var path = "";
+      for (var y = 296, r = 0; y < 628; y += 30, r++) {
+        path += "M870 " + y + "H1190";
+        for (var xx = 870 + (r % 2 ? 30 : 0); xx < 1190; xx += 60) path += "M" + xx + " " + y + "V" + (y + 30);
+      }
+      PS(c, path, "#1f1a18", 3);
+      R(c, 846, 270, 368, 30, "#4a2c18", 4); R(c, 846, 296, 368, 8, "#2a190d");
+      PF(c, "M918 624V420Q918 360 1030 360Q1142 360 1142 420V624Z", "#0b0504");
+      PF(c, "M934 624V424Q934 376 1030 376Q1126 376 1126 424V624Z", "#120806");
+      R(c, 846, 624, 368, 26, "#2a2321", 4); R(c, 846, 624, 368, 6, "#463b37");
+      R(c, 878, 236, 12, 34, "#e8dcc4"); R(c, 1160, 244, 12, 26, "#e8dcc4");
+      chair(c);
+    },
+    back: function (c, t) {
+      c.save(); c.translate(1030, 560); c.scale(1, 110 / 130);
+      var gr = c.createRadialGradient(0, 0, 0, 0, 0, 130);
+      gr.addColorStop(0, "rgba(255,154,60,.95)"); gr.addColorStop(0.5, "rgba(210,74,18,.45)"); gr.addColorStop(1, "rgba(210,74,18,0)");
+      c.fillStyle = gr; c.fillRect(-130, -130, 260, 260); c.restore();
+      R(c, 940, 596, 180, 26, "#2b1710", 13);
+      c.save(); c.translate(1030, 590); c.rotate(-0.1396); R(c, -62, -12, 130, 22, "#3a1f13", 11); c.restore();
+      fireStack(c, t, 1030, 606, 1);
+      embers(c, t, 1030, 480, 5, 190);
+      flame(c, t, 643, 458, 1, "#ffb347", 0.7, 0.1, CAND);
+      flame(c, t, 884, 232, 1, "#ffb347", 0.8, 0.2, CAND);
+      flame(c, t, 1166, 240, 1, "#ffb347", 0.65, 0.5, CAND);
+    },
+    front: function (c, t) {
+      var f = 0.78 + 0.1 * Math.sin(t * 0.011) + 0.07 * Math.sin(t * 0.029 + 2) + 0.05 * Math.random();
+      glow(c, 1030, 540, 820, [255, 138, 42], f * 0.55);
+      if (S.flash > 0.01) R(c, 602, 112, 176, 206, "rgba(207,224,255," + S.flash + ")");
+    }
+  };
+
+  /* ----- 1. Детская ----- */
+  function nlVal(t) {
+    var v = 0.62 + 0.2 * Math.sin(t / 170) + 0.1 * Math.sin(t / 53);
+    if (Math.sin(t / 3100) > 0.93) v = 0.04;
+    return clamp(v, 0, 1);
+  }
+  function star(c, x, y, r, col) {
+    c.beginPath();
+    for (var i = 0; i < 10; i++) { var a = -Math.PI / 2 + i * Math.PI / 5, rad = i % 2 ? r * 0.45 : r; c.lineTo(x + Math.cos(a) * rad, y + Math.sin(a) * rad); }
+    c.closePath(); c.fillStyle = col; c.fill();
+  }
+  var nurseryLoc = {
+    name: "Детская",
+    bg: function (c) {
+      R(c, 0, 0, W, 562, LG(c, 0, 0, 0, 560, [[0, "#2b3834"], [1, "#1c2623"]]));
+      for (var gy = 50, row = 0; gy < 400; gy += 80, row++) for (var gx = (row % 2 ? 60 : 20); gx < W; gx += 120) star(c, gx, gy, 14, "rgba(255,255,255,.055)");
+      E(c, 300, 120, 120, 60, "rgba(0,0,0,.14)"); E(c, 1130, 300, 90, 50, "rgba(0,0,0,.14)");
+      R(c, 0, 430, W, 132, "#33291f"); R(c, 0, 424, W, 10, "#4a3a2a");
+      for (var x = 40; x < W; x += 120) R(c, x, 446, 80, 100, "rgba(0,0,0,.2)", 4);
+      R(c, 0, 562, W, 158, "#2b1e17");
+      PS(c, "M0 600H1280M0 648H1280M0 698H1280", "#18100b", 3);
+      PS(c, "M200 562V600M600 562V600M1000 562V600M80 600V648M420 600V648M800 600V648M1160 600V648", "#18100b", 3);
+      E(c, 700, 668, 210, 34, "#3a2837"); E(c, 700, 668, 150, 22, "#4a3346");
+      // окно
+      R(c, 590, 90, 190, 218, "#3a2f27", 4);
+      R(c, 602, 102, 166, 194, LG(c, 0, 102, 0, 296, [[0, "#15243a"], [1, "#0b1320"]]));
+      E(c, 690, 160, 24, 24, "rgba(225,230,240,.9)");
+      PS(c, "M602 270 Q650 240 700 262 M640 250 L632 210 M700 262 L722 220", "#05080e", 4);
+      PS(c, "M685 102V296M602 200H768", "#3a2f27", 7);
+      R(c, 580, 306, 210, 12, "#4a3a2a", 3);
+      PF(c, "M590 90 H640 Q625 200 650 312 H590Z", "#5a3a44");
+      PF(c, "M780 90 H730 Q745 200 720 312 H780Z", "#5a3a44");
+      // кроватка
+      R(c, 886, 520, 290, 36, "#2a2630");
+      PF(c, "M886 520 L1176 520 L1176 538 Q1130 528 1090 540 Q1040 526 990 542 Q940 530 886 540Z", "#4a3d5a");
+      E(c, 960, 508, 26, 28, "#6b4a30"); E(c, 960, 470, 20, 18, "#6b4a30");
+      E(c, 944, 456, 8, 8, "#6b4a30"); E(c, 976, 456, 8, 8, "#6b4a30"); E(c, 960, 478, 8, 6, "#8a6a48");
+      E(c, 953, 468, 2.5, 2.5, "#0a0605");
+      PS(c, "M964 464 L972 472 M972 464 L964 472", "#0a0605", 2);
+      for (var bxx = 898; bxx < 1180; bxx += 24) R(c, bxx, 384, 6, 172, "#8f805f");
+      R(c, 872, 372, 318, 14, "#a39370", 5); R(c, 872, 556, 318, 12, "#a39370", 4);
+      R(c, 872, 350, 14, 240, "#a39370", 6); R(c, 1176, 350, 14, 240, "#a39370", 6);
+      R(c, 878, 586, 10, 30, "#7e7054"); R(c, 1178, 586, 10, 30, "#7e7054");
+      // розетка ночника
+      R(c, 826, 500, 28, 36, "#d8d0c0", 6);
+      // кубики
+      c.font = "bold 22px Georgia, serif"; c.textAlign = "center"; c.textBaseline = "middle";
+      [[640, 636, "#a85a4a", "М", -0.1], [682, 640, "#4a6a8a", "А", 0.12], [660, 606, "#8a7a3a", "М", 0.05], [722, 642, "#5a8a5a", "А", -0.15]].forEach(function (b) {
+        c.save(); c.translate(b[0], b[1]); c.rotate(b[4]); R(c, -17, -17, 34, 34, b[2], 3); c.fillStyle = "rgba(255,255,255,.75)"; c.fillText(b[3], 0, 1); c.restore();
+      });
+      chair(c);
+    },
+    back: function (c, t) {
+      // мобиль
+      var sw = Math.sin(t / 1900) * 0.15;
+      PS(c, "M1030 0V118", "#9a8a6a", 2);
+      c.save(); c.translate(1030, 118); c.rotate(sw);
+      PS(c, "M-80 0H80", "#9a8a6a", 4);
+      [[-70, "#c9a24a", 70], [-24, "#7a9aa8", 90], [24, "#b86a6a", 76], [70, "#8aa070", 96]].forEach(function (a, i) {
+        var s2 = Math.sin(t / (900 + i * 170) + i) * 0.18;
+        c.save(); c.translate(a[0], 0); c.rotate(s2);
+        PS(c, "M0 0V" + a[2], "#9a8a6a", 1.5);
+        star(c, 0, a[2] + 12, 14, a[1]);
+        c.restore();
+      });
+      c.restore();
+      // лошадка-качалка
+      var amp = 0.04 + 0.06 * (0.5 + 0.5 * Math.sin(t / 6500));
+      c.save(); c.translate(690, 592); c.rotate(Math.sin(t / 850) * amp);
+      PS(c, "M-82 -6 Q0 34 82 -6", "#5a3a22", 9);
+      PS(c, "M-46 -10 L-40 -50 M-14 0 L-12 -48 M24 0 L22 -48 M54 -8 L48 -52", "#6a4a30", 8);
+      E(c, 4, -66, 56, 26, "#8a6a4a");
+      PF(c, "M36 -76 L66 -118 L92 -112 L84 -90 L58 -62Z", "#8a6a4a");
+      E(c, 86, -104, 18, 13, "#8a6a4a", 0.4);
+      PF(c, "M56 -118 Q40 -102 46 -80 Q30 -96 36 -118Z", "#2a1a10");
+      PF(c, "M-52 -74 Q-76 -60 -66 -34 Q-56 -52 -48 -52Z", "#2a1a10");
+      E(c, 84, -108, 3, 3, "#0a0605"); E(c, 70, -104, 2.2, 2.2, "#e8dcc4");
+      c.restore();
+    },
+    front: function (c, t) {
+      glow(c, 690, 200, 380, [110, 140, 200], 0.22);
+      glow(c, 840, 508, 320, [255, 190, 110], nlVal(t) * 0.5);
+      var n = nlVal(t);
+      E(c, 840, 520, 7, 9, rgba([255, 214, 150], 0.35 + n * 0.65));
+      c.fillStyle = "rgba(0,0,0," + (0.18 * (1 - n)).toFixed(3) + ")"; c.fillRect(0, 0, W, H);
+      if (S.flash > 0.01) R(c, 602, 102, 166, 194, "rgba(207,224,255," + S.flash + ")");
+    }
+  };
+
+  /* ----- 2. Подвал ----- */
+  var basementLoc = {
+    name: "Подвал",
+    bg: function (c) {
+      var rnd = rng(77);
+      R(c, 0, 0, W, 562, "#1a1513");
+      for (var y = 0, r = 0; y < 548; y += 34, r++) {
+        for (var x = (r % 2 ? -40 : 0); x < W; x += 80) {
+          var v = Math.floor(rnd() * 16);
+          R(c, x + 2, y + 2, 76, 30, "rgb(" + (52 + v) + "," + (40 + v) + "," + (35 + v) + ")", 2);
+        }
+      }
+      for (var i = 0; i < 14; i++) { var sx = rnd() * W; R(c, sx, 0, 14 + rnd() * 20, 200 + rnd() * 340, LG(c, 0, 0, 0, 500, [[0, "rgba(0,0,0,.5)"], [1, "rgba(0,0,0,0)"]])); }
+      R(c, 0, 548, W, 14, "#0e0b09");
+      R(c, 0, 562, W, 158, "#25221f");
+      PS(c, "M0 640 L180 628 L330 650 L520 634 M700 700 L820 668 L1000 690 L1280 660 M1000 580 L1060 620 L1040 700", "#121110", 3);
+      E(c, 790, 652, 90, 17, "rgba(8,10,12,.95)"); E(c, 770, 648, 40, 6, "rgba(120,140,160,.12)");
+      // трубы
+      R(c, 0, 118, W, 26, LG(c, 0, 118, 0, 144, [[0, "#5a5048"], [0.5, "#3c352f"], [1, "#26211d"]]));
+      [[300, 14], [640, 14], [960, 14], [1180, 24]].forEach(function (j) { R(c, j[0] - 4, 112, j[1] + 8, 38, "#2a2420", 3); });
+      R(c, 1180, 144, 24, 418, LG(c, 1180, 0, 1204, 0, [[0, "#4a423b"], [1, "#221d19"]]));
+      PS(c, "M1000 140 L1004 200 M420 144 L416 230 M1190 200 L1192 330", "rgba(120,60,20,.5)", 3);
+      c.strokeStyle = "#3a322c"; c.lineWidth = 6; c.beginPath(); c.arc(1060, 94, 18, 0, TAU); c.stroke();
+      PS(c, "M1042 94H1078M1060 76V112", "#3a322c", 4);
+      // полка с банками
+      R(c, 600, 262, 190, 10, "#2c1f15");
+      [[612, "rgba(90,125,80,.75)"], [646, "rgba(120,110,60,.75)"], [680, "rgba(90,125,80,.75)"], [714, "rgba(110,70,70,.75)"], [748, "rgba(90,125,80,.75)"]].forEach(function (j) {
+        R(c, j[0], 222, 26, 40, j[1], 5); R(c, j[0] + 2, 216, 22, 8, "#3a3028", 2);
+      });
+      E(c, 726, 244, 7, 9, "rgba(230,220,200,.55)");
+      // сундук
+      R(c, 900, 498, 170, 92, "#3b2a1b", 4); R(c, 900, 498, 170, 22, "#4a3523", 4);
+      R(c, 930, 498, 12, 92, "#1c1c1c"); R(c, 1028, 498, 12, 92, "#1c1c1c");
+      R(c, 978, 530, 24, 24, "#6a5a3a", 4);
+      E(c, 600, 594, 20, 8, "rgba(0,0,0,.3)");
+      chair(c);
+    },
+    back: function (c, t) {
+      // дверь
+      var cyc = t % 22000, shk = cyc < 700 ? Math.sin(cyc / 22) * 4 * (1 - cyc / 700) : 0;
+      c.save(); c.translate(shk, 0);
+      R(c, 1090, 216, 160, 346, "#1a1d1f", 4); R(c, 1100, 226, 140, 326, "#2a2d2f", 3);
+      for (var i = 0; i < 3; i++) R(c, 1100, 270 + i * 100, 140, 12, "#1a1c1d");
+      [[1112, 238], [1228, 238], [1112, 540], [1228, 540]].forEach(function (p) { E(c, p[0], p[1], 4, 4, "#15171a"); });
+      var gl = 0.5 + 0.5 * Math.sin(t / 400);
+      R(c, 1130, 300, 90, 10, "rgba(160,20,10," + (0.35 + 0.3 * gl).toFixed(2) + ")");
+      PS(c, "M1140 420 L1150 470 M1155 415 L1168 480 M1175 420 L1180 468 M1195 430 L1204 482", "rgba(200,190,170,.35)", 3);
+      c.restore();
+      // цепи
+      var sw = Math.sin(t / 1300) * 4;
+      c.strokeStyle = "#4a4640"; c.lineWidth = 3;
+      for (var k = 0; k < 7; k++) { var cx = 560 + sw * (k / 7), cy = 150 + k * 14; c.beginPath(); c.ellipse(cx, cy, 5, 8, 0, 0, TAU); c.stroke(); }
+      // капля
+      var ph = ((t / 1000) % 2.2) / 2.2;
+      if (ph < 0.65) { var u = ph / 0.65, yy = 150 + u * u * 500; E(c, 790, yy, 3, 5, "rgba(140,170,190,.8)"); }
+      else { var rp = (ph - 0.65) / 0.35; c.strokeStyle = "rgba(140,170,190," + (0.6 * (1 - rp)).toFixed(2) + ")"; c.lineWidth = 2; c.beginPath(); c.ellipse(790, 652, 8 + rp * 60, 2 + rp * 12, 0, 0, TAU); c.stroke(); }
+    },
+    front: function (c, t) {
+      var ang = Math.sin(t / 1700) * 0.07, bxp = 860 + Math.sin(ang) * 210, byp = Math.cos(ang) * 210;
+      var tt = t % 7300, fl = 1;
+      if (tt < 110) fl = 0.2; else if (tt > 180 && tt < 260) fl = 0.45; else fl = 0.9 + 0.1 * Math.sin(t / 70);
+      PS(c, "M860 0 L" + bxp + " " + (byp - 12), "#0a0807", 3);
+      R(c, bxp - 7, byp - 14, 14, 12, "#1a1816", 2);
+      E(c, bxp, byp + 4, 10, 13, rgba([255, 236, 170], 0.3 + 0.7 * fl));
+      glow(c, bxp, byp + 6, 600, [255, 214, 130], 0.55 * fl);
+      c.fillStyle = "rgba(0,0,0," + ((1 - fl) * 0.4).toFixed(3) + ")"; c.fillRect(0, 0, W, H);
+    }
+  };
+
+  /* ----- 3. Ночной лес ----- */
+  function pine(c, x, base, h, col) {
+    c.fillStyle = col;
+    for (var i = 0; i < 5; i++) {
+      var ty = base - h + i * h * 0.19, by = ty + h * 0.32, hw = h * 0.1 + i * h * 0.055;
+      c.beginPath(); c.moveTo(x, ty); c.lineTo(x - hw, by); c.lineTo(x + hw, by); c.closePath(); c.fill();
+    }
+    c.fillRect(x - h * 0.02, base - h * 0.12, h * 0.04, h * 0.12);
+  }
+  var EYES = [[742, 478, 12], [1100, 452, 10], [612, 456, 9], [1218, 505, 13], [880, 492, 8]];
+  var forestLoc = {
+    name: "Ночной лес",
+    bg: function (c) {
+      var rnd = rng(5);
+      R(c, 0, 0, W, 540, LG(c, 0, 0, 0, 540, [[0, "#050a14"], [0.6, "#0d1626"], [1, "#17243a"]]));
+      for (var i = 0; i < 80; i++) E(c, rnd() * W, rnd() * 330, 0.9 + rnd() * 0.8, 0.9 + rnd() * 0.8, "rgba(255,255,255," + (0.25 + rnd() * 0.4).toFixed(2) + ")");
+      glow(c, 930, 150, 260, [120, 150, 210], 0.35, "screen");
+      E(c, 930, 150, 64, 64, "#d9deea"); E(c, 912, 138, 12, 12, "rgba(0,0,0,.07)"); E(c, 948, 170, 16, 16, "rgba(0,0,0,.07)"); E(c, 940, 128, 8, 8, "rgba(0,0,0,.06)");
+      PS(c, "M0 90 Q300 70 520 100 M700 60 Q1000 40 1280 80", "rgba(120,140,180,.12)", 8);
+      for (var x = -30; x < 1310; x += 38 + rnd() * 30) pine(c, x, 505, 170 + rnd() * 100, "#0a111d");
+      R(c, 0, 500, W, 220, LG(c, 0, 500, 0, 720, [[0, "#0f1a14"], [1, "#060a08"]]));
+      PF(c, "M0 520 Q200 490 400 515 T800 505 T1280 510 V720 H0Z", "#0b140f");
+      for (var x2 = 10; x2 < 1290; x2 += 90 + rnd() * 50) pine(c, x2, 548, 300 + rnd() * 90, "#060b13");
+      R(c, 0, 548, W, 172, LG(c, 0, 548, 0, 720, [[0, "#0c150f"], [1, "#050806"]]));
+      for (var g2 = 0; g2 < 160; g2++) { var gx = rnd() * W, gy = 560 + rnd() * 150; PS(c, "M" + gx + " " + gy + " l" + ((rnd() - 0.5) * 8) + " -" + (6 + rnd() * 10), "rgba(20,40,26,.8)", 1.5); }
+      EYES.forEach(function (e) { E(c, e[0], e[1] + 10, 46, 26, "#03060a"); E(c, e[0] - 22, e[1] + 18, 30, 18, "#03060a"); E(c, e[0] + 24, e[1] + 16, 32, 20, "#03060a"); });
+      // костровое кольцо
+      for (var k = 0; k < 11; k++) { var a = k / 11 * TAU; E(c, 1010 + Math.cos(a) * 76, 640 + Math.sin(a) * 20, 14, 9, k % 2 ? "#26282b" : "#1c1e21"); }
+      // передние стволы
+      R(c, 6, 0, 64, 720, "#030508"); R(c, 1196, 0, 70, 720, "#030508");
+      PF(c, "M70 120 L190 70 L200 80 L74 150Z M70 300 L150 250 L158 262 L74 330Z", "#030508");
+      PF(c, "M1196 180 L1090 120 L1082 132 L1196 210Z M1196 380 L1120 330 L1114 342 L1196 410Z", "#030508");
+      chair(c);
+    },
+    back: function (c, t) {
+      EYES.forEach(function (e, i) {
+        var cycle = 9000 + i * 2300, ph = ((t + i * 3100) % cycle) / cycle;
+        var v = ph < 0.35 ? Math.sin(ph / 0.35 * Math.PI) : 0;
+        if (((t / 1000 + i) % 4) < 0.15) v *= 0.1;
+        if (v < 0.02) return;
+        glow(c, e[0], e[1], 22, [255, 210, 60], v * 0.45);
+        E(c, e[0] - e[2], e[1], 4.5, 2.6, rgba([255, 214, 70], v), 0.15);
+        E(c, e[0] + e[2], e[1], 4.5, 2.6, rgba([255, 214, 70], v), -0.15);
+      });
+      c.save(); c.translate(1010, 640); c.scale(1, 30 / 120);
+      var gr = c.createRadialGradient(0, 0, 0, 0, 0, 120);
+      gr.addColorStop(0, "rgba(255,150,50,.8)"); gr.addColorStop(1, "rgba(255,150,50,0)");
+      c.fillStyle = gr; c.fillRect(-120, -120, 240, 240); c.restore();
+      c.save(); c.translate(1010, 626); c.rotate(-0.35); R(c, -70, -9, 140, 18, "#3a1f13", 9); c.restore();
+      c.save(); c.translate(1010, 626); c.rotate(0.35); R(c, -70, -9, 140, 18, "#2b1710", 9); c.restore();
+      fireStack(c, t, 1010, 632, 1.15);
+      embers(c, t, 1010, 500, 8, 260);
+    },
+    front: function (c, t) {
+      var f = 0.8 + 0.1 * Math.sin(t * 0.011) + 0.06 * Math.sin(t * 0.029 + 2) + 0.04 * Math.random();
+      glow(c, 1010, 580, 640, [255, 130, 40], f * 0.5);
+      for (var i = 0; i < 9; i++) {
+        var sp = 8 + (i % 3) * 5, x = ((t / 1000 * sp + i * 190) % (W + 600)) - 300, y = 470 + (i % 4) * 60 + Math.sin(t / 3000 + i) * 14;
+        var gr = c.createRadialGradient(x, y, 0, x, y, 260);
+        gr.addColorStop(0, "rgba(150,170,190,.12)"); gr.addColorStop(1, "rgba(150,170,190,0)");
+        c.save(); c.translate(x, y); c.scale(1, 0.28); c.translate(-x, -y); c.fillStyle = gr; c.fillRect(x - 260, y - 260, 520, 520); c.restore();
+      }
+      if (S.flash > 0.01) { c.fillStyle = "rgba(190,210,255," + (S.flash * 0.28).toFixed(3) + ")"; c.fillRect(0, 0, W, H); }
+    }
+  };
+
+  /* ----- 4. Больница ----- */
+  var VX = 920, VY = 330;
+  function pr(X, Y, d) { var f = 1 / (1 + d); return [VX + X * f, VY + Y * f]; }
+  function Q(c, pts, f, s, lw) { poly(c, pts.map(function (p) { return pr(p[0], p[1], p[2]); }), f, s, lw); }
+  function wallQ(X, y0, y1, d0, d1) { return [[X, y0, d0], [X, y0, d1], [X, y1, d1], [X, y1, d0]]; }
+  var HLIGHTS = [[0.5, 1.3], [2.4, 3.2], [4.4, 5.2], [6.4, 7.0]];
+  function lf(i, t) {
+    var u = t / 1000 + i * 3.7;
+    if (i === 2 && (u % 11) < 0.9) return Math.sin(u * 40) > 0 ? 0.9 : 0.05;
+    if (i === 1 && (u % 17) < 0.5) return 0.05;
+    if (i === 3) return 0.55 + 0.3 * Math.sin(u * 7) * Math.sin(u * 2.3);
+    return 0.92;
+  }
+  var hospLoc = {
+    name: "Больница",
+    bg: function (c) {
+      R(c, 0, 0, W, H, "#0c120f");
+      R(c, 828, 297, 128, 72, "#141b18");
+      R(c, 880, 318, 24, 51, "#0d1311"); R(c, 904, 318, 24, 51, "#0d1311");
+      var i, j;
+      for (i = 0; i < 9; i++) for (j = 0; j < 8; j++) Q(c, [[-920 + j * 160, 390, i], [-920 + j * 160 + 160, 390, i], [-920 + j * 160 + 160, 390, i + 1], [-920 + j * 160, 390, i + 1]], (i + j) % 2 ? "#47544c" : "#38443d");
+      for (i = 0; i < 9; i++) for (j = 0; j < 8; j++) Q(c, [[-920 + j * 160, -330, i], [-920 + j * 160 + 160, -330, i], [-920 + j * 160 + 160, -330, i + 1], [-920 + j * 160, -330, i + 1]], (i + j) % 2 ? "#2d3832" : "#27312c");
+      [-920, 360].forEach(function (X) {
+        for (i = 0; i < 9; i++) {
+          Q(c, wallQ(X, -330, 100, i, i + 1), i % 2 ? "#3f5147" : "#3a4b42");
+          Q(c, wallQ(X, 100, 380, i, i + 1), i % 2 ? "#6d8375" : "#647a6c", "#2b3830", 1);
+          Q(c, wallQ(X, 380, 390, i, i + 1), "#1f2821");
+        }
+      });
+      Q(c, wallQ(-920, 130, 330, 3, 5.5), "rgba(70,50,25,.28)");
+      Q(c, wallQ(360, 140, 340, 2.2, 3.1), "rgba(70,50,25,.25)");
+      function door(X, d0, d1) {
+        Q(c, wallQ(X, 50, 390, d0, d1), "#26332c", "#141b17", 2);
+        Q(c, wallQ(X, 110, 200, d0 + (d1 - d0) * 0.25, d1 - (d1 - d0) * 0.25), "#0a0f0d", "#141b17", 1);
+        Q(c, wallQ(X, 236, 246, d1 - (d1 - d0) * 0.2, d1 - (d1 - d0) * 0.1), "#8a8f80");
+      }
+      door(360, 0.9, 1.6); door(360, 3.3, 3.9); door(360, 5.7, 6.2);
+      door(-920, 1.9, 2.6); door(-920, 4.3, 4.9); door(-920, 6.6, 7.1);
+      HLIGHTS.forEach(function (l) { Q(c, [[-80, -330, l[0]], [80, -330, l[0]], [80, -330, l[1]], [-80, -330, l[1]]], "#1b221f", "#0c100e", 2); });
+      // каталка
+      Q(c, [[110, 250, 0.35], [300, 250, 0.35], [300, 250, 1.8], [110, 250, 1.8]], "#a7b3a8");
+      Q(c, [[110, 250, 0.35], [300, 250, 0.35], [300, 272, 0.35], [110, 272, 0.35]], "#8c978d");
+      Q(c, [[110, 250, 0.35], [110, 250, 1.8], [110, 272, 1.8], [110, 272, 0.35]], "#6f7a71");
+      Q(c, [[150, 215, 0.7], [270, 215, 0.7], [270, 250, 1.6], [150, 250, 1.6]], "#c3cdc3");
+      [[110, 0.35], [300, 0.35], [110, 1.8], [300, 1.8]].forEach(function (p) {
+        var a = pr(p[0], 272, p[1]), b = pr(p[0], 390, p[1]); PS(c, "M" + a[0] + " " + a[1] + "L" + b[0] + " " + b[1], "#4d5650", 3);
+        var w = pr(p[0], 384, p[1]); E(c, w[0], w[1], 5 / (1 + p[1]) + 1.5, 5 / (1 + p[1]) + 1.5, "#1a1d1b");
+      });
+      chair(c);
+    },
+    back: function (c, t) {
+      HLIGHTS.forEach(function (l, i) {
+        var a = lf(i, t);
+        Q(c, [[-66, -330, l[0] + 0.08], [66, -330, l[0] + 0.08], [66, -330, l[1] - 0.08], [-66, -330, l[1] - 0.08]], "rgba(228,242,220," + a.toFixed(2) + ")");
+      });
+      var ex = 0.5 + 0.5 * Math.sin(t / 700);
+      R(c, 886, 304, 18, 5, "rgba(190,30,30," + (0.5 + 0.4 * ex).toFixed(2) + ")");
+      var fig = lf(2, t) < 0.3 || lf(1, t) < 0.3 ? 0.92 : 0;
+      S.fig = lerp(S.fig || 0, fig, 0.25);
+      if (S.fig > 0.03) {
+        c.fillStyle = "rgba(0,0,0," + S.fig.toFixed(2) + ")";
+        c.beginPath(); c.arc(893, 327, 3.6, 0, TAU); c.fill();
+        R(c, 888, 331, 10, 30, "rgba(0,0,0," + S.fig.toFixed(2) + ")", 3);
+      }
+    },
+    front: function (c, t) {
+      var avg = 0;
+      HLIGHTS.forEach(function (l, i) {
+        var a = lf(i, t); avg += a / 4;
+        var p = pr(0, -290, (l[0] + l[1]) / 2), f = 1 / (1 + (l[0] + l[1]) / 2);
+        glow(c, p[0], p[1] + 40 * f, 340 * f + 40, [215, 235, 205], a * 0.3);
+      });
+      var gr = c.createRadialGradient(VX, VY, 20, VX, VY, 420);
+      gr.addColorStop(0, "rgba(6,10,8,.65)"); gr.addColorStop(1, "rgba(6,10,8,0)");
+      c.fillStyle = gr; c.fillRect(0, 0, W, H);
+      c.fillStyle = "rgba(3,8,5," + (0.2 + (1 - avg) * 0.35).toFixed(3) + ")"; c.fillRect(0, 0, W, H);
+    }
+  };
+
+  /* ----- 5. Чердак ----- */
+  var DUST = []; (function () { var r = rng(9); for (var i = 0; i < 46; i++) DUST.push({ u: r(), y: r(), s: 0.4 + r() * 0.9, z: r() * 6.28, r: 1 + r() * 1.4 }); })();
+  var atticLoc = {
+    name: "Чердак",
+    bg: function (c) {
+      R(c, 0, 0, W, H, "#120c09");
+      var gable = [[0, 720], [0, 380], [640, 30], [1280, 380], [1280, 720]];
+      poly(c, gable, LG(c, 0, 30, 0, 720, [[0, "#2e2119"], [1, "#1f150f"]]));
+      c.save(); c.beginPath(); c.moveTo(0, 720); c.lineTo(0, 380); c.lineTo(640, 30); c.lineTo(1280, 380); c.lineTo(1280, 720); c.closePath(); c.clip();
+      var pl = ""; for (var x = 0; x < W; x += 40) pl += "M" + x + " 0V720";
+      PS(c, pl, "rgba(0,0,0,.35)", 2);
+      c.restore();
+      PS(c, "M640 30 L0 380 M640 30 L1280 380", "#3a2818", 24);
+      PS(c, "M640 -10 L-40 340 M640 -10 L1320 340", "#2a1c11", 16);
+      R(c, 0, 324, W, 22, "#35241a"); R(c, 630, 30, 20, 300, "#35241a");
+      R(c, 0, 562, W, 158, "#352418");
+      PS(c, "M0 600H1280M0 645H1280M0 695H1280", "#1c1109", 3);
+      PS(c, "M200 562V600M580 562V600M980 562V600M90 600V645M440 600V645M820 600V645M1180 600V645", "#1c1109", 3);
+      R(c, 0, 548, W, 14, "#1a100a");
+      // круглое окно
+      E(c, 930, 215, 82, 82, "#1a120c");
+      E(c, 930, 215, 72, 72, LG(c, 0, 143, 0, 287, [[0, "#324463"], [1, "#16233a"]]));
+      E(c, 950, 190, 20, 20, "rgba(225,230,240,.85)");
+      PS(c, "M930 143V287M858 215H1002", "#1a120c", 7);
+      // сундуки и коробки
+      R(c, 560, 510, 150, 82, "#4a2f1c", 8); R(c, 560, 510, 150, 22, "#5a3a24", 8);
+      R(c, 590, 510, 10, 82, "#2a1a0e"); R(c, 670, 510, 10, 82, "#2a1a0e"); R(c, 626, 540, 18, 18, "#7a6a3a", 3);
+      R(c, 712, 548, 58, 44, "#3d2a1b", 3); R(c, 724, 510, 46, 40, "#46321f", 3);
+      // паутина
+      PS(c, "M0 380 Q50 400 110 470 M0 380 Q30 430 40 500 M0 380 Q70 390 150 410 M20 392 Q40 410 60 440", "rgba(220,220,210,.22)", 1.5);
+      PS(c, "M1280 380 Q1230 400 1170 470 M1280 380 Q1250 430 1240 500 M1280 380 Q1210 390 1130 410", "rgba(220,220,210,.22)", 1.5);
+      // рамка портрета
+      R(c, 1090, 300, 150, 190, "#5a4020", 6); R(c, 1100, 310, 130, 170, "#120d0a");
+      chair(c);
+    },
+    back: function (c, t) {
+      // клетка
+      c.save(); c.translate(722, 76); c.rotate(Math.sin(t / 1800) * 0.05);
+      PS(c, "M0 0V86", "#6a5a40", 2);
+      c.strokeStyle = "#8a7a54"; c.lineWidth = 2;
+      c.beginPath(); c.ellipse(0, 126, 26, 38, 0, 0, TAU); c.stroke();
+      c.beginPath(); c.ellipse(0, 126, 10, 38, 0, 0, TAU); c.stroke();
+      PS(c, "M-26 126H26M-22 106H22M-22 146H22", "#8a7a54", 1.5);
+      R(c, -7, 82, 14, 8, "#8a7a54", 3);
+      c.restore();
+      // портрет
+      PF(c, "M1115 480 Q1120 420 1165 418 Q1210 420 1215 480Z", "#0c0a09");
+      PF(c, "M1148 424 L1165 442 L1182 424 L1176 418 L1154 418Z", "#bfb7a4");
+      E(c, 1165, 376, 24, 30, "#cfc3b0");
+      PF(c, "M1140 372 Q1138 340 1165 338 Q1192 340 1190 372 Q1180 352 1165 352 Q1150 352 1140 372Z", "#1a1410");
+      E(c, 1165, 338, 14, 9, "#1a1410");
+      // взгляд
+      if (t > (S.pAt || 0)) { S.pAt = t + 2500 + Math.random() * 3500; S.px = Math.random() < 0.45 ? 0 : (Math.random() - 0.5) * 5; S.py = Math.random() < 0.45 ? 1.2 : (Math.random() - 0.5) * 2; }
+      S.cx = lerp(S.cx || 0, S.px || 0, 0.06); S.cy = lerp(S.cy || 0, S.py || 0, 0.06);
+      E(c, 1155, 372, 5.5, 3.4, "#e8e0d0"); E(c, 1176, 372, 5.5, 3.4, "#e8e0d0");
+      E(c, 1155 + S.cx, 372 + S.cy * 0.5, 2, 2, "#050403"); E(c, 1176 + S.cx, 372 + S.cy * 0.5, 2, 2, "#050403");
+      PS(c, "M1149 364 Q1155 361 1161 364 M1170 364 Q1176 361 1182 364", "#1a1410", 1.6);
+      PS(c, "M1157 392 Q1165 395 1173 392", "#7a4a40", 1.6);
+      c.save(); c.globalAlpha = 0.07; c.fillStyle = "#fff"; c.beginPath(); c.moveTo(1100, 310); c.lineTo(1160, 310); c.lineTo(1100, 400); c.closePath(); c.fill(); c.restore();
+      // манекен под простынёй
+      var sx = Math.sin(t / 2200) * 1.5;
+      c.save(); c.translate(sx, 0);
+      PF(c, "M790 420 Q760 424 758 470 Q750 540 735 602 H865 Q850 540 842 470 Q840 424 810 420Z", LG(c, 735, 0, 865, 0, [[0, "#8f887a"], [0.5, "#c4bcaa"], [1, "#7c7566"]]));
+      E(c, 800, 408, 18, 22, "#bdb5a3");
+      PS(c, "M780 470 Q778 530 770 600 M820 470 Q824 530 832 600 M800 440 Q800 520 800 600", "rgba(60,50,40,.35)", 2);
+      R(c, 796, 600, 8, 14, "#1a100a");
+      c.restore();
+      // лунный луч
+      c.save(); c.globalCompositeOperation = "screen";
+      var beam = [[868, 270], [990, 262], [870, 600], [640, 600]];
+      poly(c, beam, LG(c, 0, 262, 0, 600, [[0, "rgba(150,180,235,.32)"], [1, "rgba(150,180,235,.05)"]]));
+      DUST.forEach(function (d) {
+        var yy = 270 + ((d.y * 330 + t * 0.012 * d.s) % 330), k = (yy - 270) / 330;
+        var lx = lerp(868, 640, k), rx2 = lerp(990, 870, k);
+        var xx = lerp(lx, rx2, d.u) + 7 * Math.sin(t / 1500 + d.z);
+        var a = Math.sin(k * Math.PI) * 0.6;
+        c.fillStyle = "rgba(220,230,255," + a.toFixed(2) + ")"; c.beginPath(); c.arc(xx, yy, d.r, 0, TAU); c.fill();
+      });
+      c.restore();
+    },
+    front: function (c, t) {
+      glow(c, 930, 215, 440, [130, 160, 220], 0.25);
+      c.fillStyle = "rgba(0,0,0,.2)"; c.fillRect(0, 0, W, H);
+      if (S.flash > 0.01) { E(c, 930, 215, 72, 72, "rgba(207,224,255," + S.flash + ")"); }
+    }
+  };
+
+  var LOCS = [fireLoc, nurseryLoc, basementLoc, forestLoc, hospLoc, atticLoc];
+  var cur = 0, fade = 0, fadeDir = 0, pending = -1;
+
+  function buildBg(i) {
+    bx.setTransform(1, 0, 0, 1, 0, 0); bx.clearRect(0, 0, bgc.width, bgc.height);
+    bx.setTransform(SC, 0, 0, SC, 0, 0);
+    LOCS[i].bg(bx);
+  }
+  buildBg(0);
+
+  function setLoc(i) {
+    if (i === cur || fadeDir !== 0) return;
+    pending = i; fadeDir = 1;
+    var chips = $("chips").children;
+    for (var k = 0; k < chips.length; k++) chips[k].setAttribute("aria-pressed", k === i ? "true" : "false");
+  }
+  var chipsEl = $("chips");
+  LOCS.forEach(function (l, i) {
+    var b = document.createElement("button");
+    b.type = "button"; b.className = "chip"; b.textContent = l.name; b.setAttribute("aria-pressed", i === 0 ? "true" : "false");
+    b.addEventListener("click", function () { setLoc(i); });
+    chipsEl.appendChild(b);
+  });
+  $("ovLoc").addEventListener("click", function (e) { e.stopPropagation(); setLoc((cur + 1) % LOCS.length); armOverlayHide(); });
+
+  /* ===================== звук ===================== */
+  var audio = new Audio(); audio.preload = "auto";
+  var ctx = null, analyser = null, buf = null, outGain = null, recDest = null, fileNode = null, micNode = null, micStream = null;
+  var mode = "idle", testStart = 0, peakEnv = 0.02, lvl = 0, hasFile = false;
+  function setStatus(t) { $("status").textContent = t; }
+  function fmt(s) { if (!isFinite(s)) s = 0; var m = Math.floor(s / 60), r = Math.floor(s % 60); return m + ":" + (r < 10 ? "0" : "") + r; }
+
+  function ensureCtx() {
+    if (!ctx) {
+      var AC = window.AudioContext || window.webkitAudioContext;
+      ctx = new AC();
+      analyser = ctx.createAnalyser(); analyser.fftSize = 1024; analyser.smoothingTimeConstant = 0;
+      buf = new Float32Array(analyser.fftSize);
+      outGain = ctx.createGain(); analyser.connect(outGain); outGain.connect(ctx.destination);
+      if (ctx.createMediaStreamDestination) { recDest = ctx.createMediaStreamDestination(); analyser.connect(recDest); }
+    }
+    if (ctx.state === "suspended") ctx.resume();
+    ambInit();
+  }
+
+  $("file").addEventListener("change", function (e) {
+    var f = e.target.files && e.target.files[0];
+    if (!f) return;
+    try {
+      ensureCtx();
+      if (!fileNode) { fileNode = ctx.createMediaElementSource(audio); fileNode.connect(analyser); }
+      if (micStream) stopMic();
+      audio.src = URL.createObjectURL(f); audio.load();
+      hasFile = true; mode = "idle";
+      $("play").disabled = false; $("seek").disabled = false;
+      setStatus("Загружено: " + f.name + ". Нажмите «Пуск» или «Записать ролик».");
+    } catch (err) { setStatus("Не удалось открыть этот файл. Попробуйте mp3, wav или m4a."); }
+  });
+  function togglePlay() {
+    if (!hasFile) return;
+    ensureCtx();
+    if (micStream) stopMic();
+    outGain.gain.value = 1;
+    if (audio.paused) audio.play().then(function () { mode = "file"; refreshPlay(); }).catch(function () { setStatus("Не получилось запустить звук. Нажмите «Пуск» ещё раз."); });
+    else { audio.pause(); refreshPlay(); }
+  }
+  function refreshPlay() { var t = audio.paused ? "Пуск" : "Пауза"; $("play").textContent = t; $("ovPlay").textContent = t; }
+  $("play").addEventListener("click", togglePlay);
+  $("ovPlay").addEventListener("click", function (e) { e.stopPropagation(); togglePlay(); armOverlayHide(); });
+  audio.addEventListener("ended", function () { mode = "idle"; refreshPlay(); if (recState === "rec" && !micStream) setTimeout(stopRec, 1200); });
+  audio.addEventListener("pause", refreshPlay);
+  audio.addEventListener("play", refreshPlay);
+  var seeking = false;
+  audio.addEventListener("timeupdate", function () {
+    if (!audio.duration) return;
+    if (!seeking) $("seek").value = Math.round(audio.currentTime / audio.duration * 1000);
+    $("time").textContent = fmt(audio.currentTime) + " / " + fmt(audio.duration);
+  });
+  $("seek").addEventListener("input", function () { seeking = true; if (audio.duration) audio.currentTime = $("seek").value / 1000 * audio.duration; });
+  $("seek").addEventListener("change", function () { seeking = false; });
+
+  function stopMic() {
+    if (micStream) micStream.getTracks().forEach(function (t) { t.stop(); });
+    if (micNode) { try { micNode.disconnect(); } catch (e) {} }
+    micStream = null; micNode = null;
+    if (mode === "mic") mode = "idle";
+    $("mic").classList.remove("on"); $("mic").textContent = "Говорить в микрофон";
+  }
+  $("mic").addEventListener("click", function () {
+    if (micStream) { stopMic(); setStatus("Микрофон выключен."); return; }
+    if (!navigator.mediaDevices || !navigator.mediaDevices.getUserMedia) {
+      setStatus("Микрофон здесь недоступен: эта встроенная страница не получает к нему доступ. Рот двигается по файлу озвучки."); return;
+    }
+    try { ensureCtx(); } catch (e) {}
+    navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: false } }).then(function (stream) {
+      if (!audio.paused) audio.pause();
+      micStream = stream; micNode = ctx.createMediaStreamSource(stream); micNode.connect(analyser);
+      outGain.gain.value = 0; mode = "mic";
+      $("mic").classList.add("on"); $("mic").textContent = "Выключить микрофон";
+      setStatus("Микрофон включён. Говорите, рассказчик повторяет.");
+    }).catch(function () { setStatus("Доступ к микрофону не получен. Здесь он может быть заблокирован, тогда используйте файл озвучки."); });
+  });
+  $("test").addEventListener("click", function () {
+    mode = "test"; testStart = performance.now();
+    setStatus("Проверка: рассказчик говорит без звука 5 секунд.");
+    setTimeout(function () { if (mode === "test") { mode = "idle"; setStatus(hasFile ? "Готово. Нажмите «Пуск» для озвучки." : "Загрузите файл озвучки."); } }, 5000);
+  });
+
+  /* ===================== звуки локаций (синтез, без файлов) ===================== */
+  var amb = { on: true, vol: 0.6, bus: null, scene: null, idx: -1 }, NB = null;
+
+  function ambInit() {
+    if (amb.bus || !ctx) return;
+    var n = ctx.sampleRate * 2, b = ctx.createBuffer(1, n, ctx.sampleRate), d = b.getChannelData(0);
+    for (var i = 0; i < n; i++) d[i] = Math.random() * 2 - 1;
+    NB = b;
+    amb.bus = ctx.createGain(); amb.bus.gain.value = amb.on ? amb.vol * 2 : 0;
+    amb.bus.connect(ctx.destination);
+    if (recDest) amb.bus.connect(recDest);
+    ambSwitch(cur);
+  }
+  function ambGain() { if (amb.bus) amb.bus.gain.setTargetAtTime(amb.on ? amb.vol * 2 : 0, ctx.currentTime, 0.08); }
+  function ambSwitch(i) {
+    if (!amb.bus) return;
+    if (amb.scene) amb.scene.stop();
+    amb.idx = i; amb.scene = SCENES[i](newScene());
+  }
+  function newScene() {
+    var s = { g: ctx.createGain(), timers: [], nodes: [], dead: false };
+    s.g.gain.value = 0; s.g.connect(amb.bus);
+    s.g.gain.setTargetAtTime(1, ctx.currentTime, 0.4);
+    s.keep = function (n) { s.nodes.push(n); return n; };
+    s.every = function (a, b, fn) {
+      (function loop() {
+        if (s.dead) return;
+        s.timers.push(setTimeout(function () { if (s.dead) return; try { fn(); } catch (e) {} loop(); }, a + Math.random() * (b - a)));
+      })();
+    };
+    s.poll = function (ms, fn) { s.timers.push(setInterval(function () { if (!s.dead) { try { fn(); } catch (e) {} } }, ms)); };
+    s.loop = function (type, freq, q, vol, dest) {
+      var n = s.keep(ctx.createBufferSource()); n.buffer = NB; n.loop = true;
+      var f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q;
+      var gn = ctx.createGain(); gn.gain.value = vol;
+      n.connect(f); f.connect(gn); gn.connect(dest || s.g); n.start(0, Math.random());
+      return { filter: f, gain: gn };
+    };
+    s.drone = function (freq, vol) {
+      var o = s.keep(ctx.createOscillator()); o.type = "sine"; o.frequency.value = freq;
+      var gn = ctx.createGain(); gn.gain.value = vol; o.connect(gn); gn.connect(s.g); o.start();
+    };
+    s.slow = function (node, rate, depth) {
+      var l = s.keep(ctx.createOscillator()); l.frequency.value = rate;
+      var lg = ctx.createGain(); lg.gain.value = depth; l.connect(lg); lg.connect(node); l.start();
+    };
+    s.stop = function () {
+      s.dead = true;
+      s.timers.forEach(function (id) { clearTimeout(id); clearInterval(id); });
+      try { s.g.gain.cancelScheduledValues(ctx.currentTime); s.g.gain.setTargetAtTime(0, ctx.currentTime, 0.15); } catch (e) {}
+      setTimeout(function () {
+        s.nodes.forEach(function (n) { try { if (n.stop) n.stop(); } catch (e) {} try { n.disconnect(); } catch (e) {} });
+        try { s.g.disconnect(); } catch (e) {}
+      }, 1200);
+    };
+    return s;
+  }
+  function now0() { return ctx.currentTime + 0.02; }
+  function tone(dest, type, f0, f1, t0, dur, vol, att) {
+    var o = ctx.createOscillator(); o.type = type;
+    o.frequency.setValueAtTime(f0, t0);
+    if (f1) o.frequency.exponentialRampToValueAtTime(f1, t0 + dur);
+    var gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t0);
+    gn.gain.linearRampToValueAtTime(vol, t0 + (att || 0.01));
+    gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(gn); gn.connect(dest); o.start(t0); o.stop(t0 + dur + 0.05);
+  }
+  function burst(dest, t0, dur, vol, type, freq, q) {
+    var n = ctx.createBufferSource(); n.buffer = NB;
+    var f = ctx.createBiquadFilter(); f.type = type; f.frequency.value = freq; f.Q.value = q || 1;
+    var gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t0);
+    gn.gain.linearRampToValueAtTime(vol, t0 + Math.min(0.004, dur / 3));
+    gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    n.connect(f); f.connect(gn); gn.connect(dest);
+    n.start(t0, Math.random() * 1.5, dur + 0.05);
+  }
+  function bellSafe(dest, f, t0, vol) {
+    var P = [[1, 1, 1.7], [2.76, 0.5, 1.0], [5.4, 0.25, 0.6], [8.9, 0.12, 0.35]];
+    P.forEach(function (p) {
+      var o = ctx.createOscillator(); o.type = "sine"; o.frequency.value = f * p[0] * (1 + (Math.random() - 0.5) * 0.006);
+      var gn = ctx.createGain(); gn.gain.setValueAtTime(0.0001, t0);
+      gn.gain.linearRampToValueAtTime(vol * p[1], t0 + 0.003);
+      gn.gain.exponentialRampToValueAtTime(0.0001, t0 + p[2]);
+      o.connect(gn); gn.connect(dest); o.start(t0); o.stop(t0 + p[2] + 0.05);
+    });
+  }
+  function creak(dest, t0, dur, vol, base) {
+    var o = ctx.createOscillator(); o.type = "sawtooth";
+    o.frequency.setValueAtTime(base, t0);
+    for (var k = 1; k <= 6; k++) o.frequency.linearRampToValueAtTime(base * (0.8 + Math.random() * 0.55), t0 + dur * k / 6);
+    var f = ctx.createBiquadFilter(); f.type = "bandpass"; f.Q.value = 7;
+    f.frequency.setValueAtTime(240, t0); f.frequency.linearRampToValueAtTime(520 + Math.random() * 500, t0 + dur);
+    var gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t0);
+    gn.gain.linearRampToValueAtTime(vol, t0 + dur * 0.2);
+    gn.gain.linearRampToValueAtTime(vol * 0.55, t0 + dur * 0.7);
+    gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(f); f.connect(gn); gn.connect(dest); o.start(t0); o.stop(t0 + dur + 0.05);
+    burst(dest, t0, dur * 0.8, vol * 0.25, "bandpass", 900 + Math.random() * 500, 4);
+  }
+  function frog(dest, t0) {
+    var dur = 0.22 + Math.random() * 0.2, f0 = 150 + Math.random() * 120;
+    var o = ctx.createOscillator(); o.type = "sawtooth";
+    o.frequency.setValueAtTime(f0, t0); o.frequency.exponentialRampToValueAtTime(f0 * 0.75, t0 + dur);
+    var bp = ctx.createBiquadFilter(); bp.type = "bandpass"; bp.frequency.value = 420 + Math.random() * 220; bp.Q.value = 2.5;
+    var am = ctx.createGain(); am.gain.value = 0.5;
+    var lfo = ctx.createOscillator(); lfo.frequency.value = 22 + Math.random() * 14;
+    var lg = ctx.createGain(); lg.gain.value = 0.5; lfo.connect(lg); lg.connect(am.gain);
+    var env = ctx.createGain();
+    env.gain.setValueAtTime(0.0001, t0); env.gain.linearRampToValueAtTime(0.26, t0 + 0.03); env.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    o.connect(bp); bp.connect(am); am.connect(env); env.connect(dest);
+    o.start(t0); lfo.start(t0); o.stop(t0 + dur + 0.05); lfo.stop(t0 + dur + 0.05);
+  }
+  function tweet(dest, t0) {
+    var n = 3 + Math.floor(Math.random() * 4), f = 2200 + Math.random() * 1400;
+    for (var i = 0; i < n; i++) tone(dest, "sine", f, f * (Math.random() < 0.5 ? 1.35 : 0.75), t0 + i * 0.11, 0.08, 0.09, 0.01);
+  }
+  function owl(dest, t0) {
+    tone(dest, "sine", 430, 390, t0, 0.5, 0.2, 0.14);
+    tone(dest, "sine", 410, 350, t0 + 0.72, 0.7, 0.2, 0.16);
+  }
+  function rumble(dest, t0, dur, vol) {
+    var n = ctx.createBufferSource(); n.buffer = NB; n.loop = true;
+    var f = ctx.createBiquadFilter(); f.type = "lowpass"; f.frequency.setValueAtTime(170, t0); f.frequency.linearRampToValueAtTime(60, t0 + dur);
+    var gn = ctx.createGain();
+    gn.gain.setValueAtTime(0.0001, t0); gn.gain.linearRampToValueAtTime(vol, t0 + 0.3); gn.gain.exponentialRampToValueAtTime(0.0001, t0 + dur);
+    n.connect(f); f.connect(gn); gn.connect(dest); n.start(t0, Math.random()); n.stop(t0 + dur + 0.1);
+  }
+  function thunder() {
+    if (!ctx || !amb.bus || [0, 1, 3, 5].indexOf(amb.idx) < 0) return;
+    rumble(amb.bus, ctx.currentTime + 0.6 + Math.random() * 1.2, 3.2, 0.55);
+  }
+  function fireSound(s, k) {
+    s.loop("lowpass", 320, 0.7, 0.16 * k);
+    s.every(50, 330, function () {
+      var t = now0(), r = Math.random();
+      if (r < 0.1) burst(s.g, t, 0.05, 0.5 * k, "bandpass", 700 + Math.random() * 600, 1);
+      else if (r < 0.3) { for (var i = 0; i < 5; i++) burst(s.g, t + i * 0.025, 0.01, 0.2 * k, "bandpass", 2500 + Math.random() * 3000, 1.5); }
+      else burst(s.g, t, 0.006 + Math.random() * 0.03, (0.08 + Math.random() * 0.25) * k, "bandpass", 900 + Math.random() * 3500, 1.2);
+    });
+  }
+
+  var SCENES = [
+    // 0. Комната у камина: потрескивание дров, тяга в трубе
+    function (s) {
+      fireSound(s, 1);
+      var w = s.loop("bandpass", 340, 0.8, 0.03);
+      s.slow(w.gain.gain, 0.07, 0.02);
+      return s;
+    },
+    // 1. Детская: жуткое позвякивание погремушек и колокольчиков
+    function (s) {
+      s.drone(58, 0.02);
+      s.loop("lowpass", 180, 0.7, 0.03);
+      var P = [1318, 1568, 1760, 2093, 2349, 2637, 3136];
+      s.every(3000, 8500, function () {
+        var t = now0(), n = 2 + Math.floor(Math.random() * 4), f = P[Math.floor(Math.random() * P.length)];
+        for (var i = 0; i < n; i++) bellSafe(s.g, f * (1 + (Math.random() - 0.5) * 0.03), t + i * (0.09 + Math.random() * 0.16), 0.07);
+      });
+      s.every(6500, 15000, function () {
+        var t = now0(), n = 6 + Math.floor(Math.random() * 5);
+        for (var i = 0; i < n; i++) burst(s.g, t + i * 0.03, 0.02, 0.12 * (1 - i / (n + 2)), "bandpass", 5500 + Math.random() * 1500, 2);
+      });
+      var prev = Math.sin(performance.now() / 850) > 0;
+      s.poll(40, function () {
+        var cur2 = Math.sin(performance.now() / 850) > 0;
+        if (cur2 !== prev) { prev = cur2; creak(s.g, now0(), 0.45, 0.025, 95); }
+      });
+      return s;
+    },
+    // 2. Подвал: капли (в такт анимации), гул труб, лязг двери и цепей
+    function (s) {
+      s.drone(55, 0.035); s.drone(110, 0.012);
+      s.loop("lowpass", 200, 0.7, 0.03);
+      var prevPh = 0, prevCyc = performance.now() % 22000;
+      s.poll(30, function () {
+        var t = performance.now(), ph = ((t / 1000) % 2.2) / 2.2;
+        if (prevPh < 0.65 && ph >= 0.65) {
+          var t0 = now0();
+          [[0, 1], [0.19, 0.4], [0.36, 0.2]].forEach(function (e) {
+            tone(s.g, "sine", 1500, 650, t0 + e[0], 0.09, 0.12 * e[1], 0.004);
+            burst(s.g, t0 + e[0], 0.04, 0.05 * e[1], "bandpass", 3000, 1);
+          });
+        }
+        prevPh = ph;
+        var cyc = t % 22000;
+        if (cyc < prevCyc) {
+          var d0 = now0();
+          for (var k = 0; k < 9; k++) burst(s.g, d0 + k * 0.06, 0.05, 0.3 * (1 - k / 10), "lowpass", 420, 1);
+          tone(s.g, "sawtooth", 95, 55, d0, 0.5, 0.06, 0.02);
+          bellSafe(s.g, 1250, d0 + 0.02, 0.06);
+        }
+        prevCyc = cyc;
+      });
+      s.every(12000, 25000, function () { tone(s.g, "triangle", 72, 46, now0(), 2.1, 0.09, 0.6); });
+      s.every(14000, 30000, function () { var t = now0(); bellSafe(s.g, 2100, t, 0.04); bellSafe(s.g, 1900, t + 0.14, 0.03); });
+      return s;
+    },
+    // 3. Ночной лес: костёр, лягушки, птицы, сверчки, ветер
+    function (s) {
+      fireSound(s, 0.55);
+      var w = s.loop("bandpass", 420, 0.7, 0.035);
+      s.slow(w.gain.gain, 0.09, 0.025);
+      s.every(500, 2400, function () {
+        var t = now0(), n = 3 + Math.floor(Math.random() * 3), f = 4200 + Math.random() * 400;
+        for (var i = 0; i < n; i++) tone(s.g, "sine", f, 0, t + i * 0.045, 0.024, 0.02, 0.004);
+      });
+      s.every(900, 3500, function () {
+        var t = now0(), n = 1 + Math.floor(Math.random() * 3);
+        for (var i = 0; i < n; i++) frog(s.g, t + i * (0.3 + Math.random() * 0.15));
+      });
+      s.every(3500, 10000, function () { tweet(s.g, now0()); });
+      s.every(14000, 28000, function () { owl(s.g, now0()); });
+      return s;
+    },
+    // 4. Больница: гудение мерцающей лампы в такт мерцанию на экране
+    function (s) {
+      var buzz = ctx.createGain(); buzz.gain.value = 0; buzz.connect(s.g);
+      var o1 = s.keep(ctx.createOscillator()); o1.type = "sawtooth"; o1.frequency.value = 100;
+      var f1 = ctx.createBiquadFilter(); f1.type = "bandpass"; f1.frequency.value = 900; f1.Q.value = 0.8;
+      o1.connect(f1); f1.connect(buzz); o1.start();
+      var o2 = s.keep(ctx.createOscillator()); o2.type = "sine"; o2.frequency.value = 50;
+      var g2 = ctx.createGain(); g2.gain.value = 0.6; o2.connect(g2); g2.connect(buzz); o2.start();
+      s.loop("highpass", 5000, 0.7, 0.03, buzz);
+      s.loop("lowpass", 140, 0.7, 0.07);
+      var prev = [1, 1, 1, 1], lastClick = [0, 0, 0, 0];
+      s.poll(40, function () {
+        var t = performance.now(), sum = 0;
+        for (var i = 0; i < 4; i++) {
+          var a = lf(i, t); sum += a;
+          if ((prev[i] > 0.5) !== (a > 0.5) && t - lastClick[i] > 150) {
+            lastClick[i] = t;
+            var c0 = now0();
+            burst(s.g, c0, 0.012, 0.22, "highpass", 1800, 0.7);
+            tone(s.g, "square", 100, 90, c0, 0.05, 0.05, 0.004);
+            if (a > 0.5) tone(s.g, "sawtooth", 130, 100, c0, 0.14, 0.05, 0.01);
+          }
+          prev[i] = a;
+        }
+        buzz.gain.setTargetAtTime(Math.min(1, sum / 4) * 0.06, ctx.currentTime, 0.015);
+      });
+      s.every(9000, 22000, function () { var t = now0(); tone(s.g, "sine", 880, 0, t, 0.12, 0.04, 0.005); tone(s.g, "sine", 880, 0, t + 0.3, 0.12, 0.04, 0.005); });
+      return s;
+    },
+    // 5. Чердак: поскрипывание досок, гул ветра под крышей
+    function (s) {
+      var w = s.loop("bandpass", 480, 2.5, 0.05);
+      s.slow(w.gain.gain, 0.06, 0.035);
+      s.loop("lowpass", 200, 0.7, 0.03);
+      s.every(3500, 9000, function () {
+        var t = now0(), dur = 0.5 + Math.random() * 0.7, base = 60 + Math.random() * 50;
+        creak(s.g, t, dur, 0.17, base);
+        if (Math.random() < 0.4) creak(s.g, t + dur * 0.8 + 0.25, 0.35 + Math.random() * 0.4, 0.13, base * 1.2);
+        if (Math.random() < 0.3) burst(s.g, t + dur + 0.3, 0.07, 0.12, "lowpass", 190, 1);
+      });
+      s.every(20000, 40000, function () { burst(s.g, now0(), 0.1, 0.2, "lowpass", 150, 1); });
+      return s;
+    }
+  ];
+
+  $("amb").addEventListener("click", function () {
+    amb.on = !amb.on;
+    $("amb").textContent = amb.on ? "Звуки: вкл" : "Звуки: выкл";
+    $("amb").classList.toggle("on", amb.on);
+    $("amb").setAttribute("aria-pressed", amb.on ? "true" : "false");
+    try { ensureCtx(); } catch (e) {}
+    ambGain();
+  });
+  $("vol").addEventListener("input", function () { amb.vol = +$("vol").value / 100; ambGain(); });
+  document.addEventListener("pointerdown", function () { try { ensureCtx(); } catch (e) {} }, { once: true });
+
+  /* ===================== режим съёмки ===================== */
+  var hideTimer = null;
+  function armOverlayHide() { clearTimeout(hideTimer); hideTimer = setTimeout(function () { $("overlay").classList.remove("show"); }, 3500); }
+  function enterClean() {
+    document.body.classList.add("clean");
+    try { var el = document.documentElement; if (el.requestFullscreen) { var p = el.requestFullscreen(); if (p && p.catch) p.catch(function () {}); } } catch (e) {}
+    $("overlay").classList.add("show"); armOverlayHide();
+  }
+  function exitClean() {
+    document.body.classList.remove("clean"); $("overlay").classList.remove("show");
+    try { if (document.fullscreenElement && document.exitFullscreen) document.exitFullscreen(); } catch (e) {}
+  }
+  $("clean").addEventListener("click", enterClean);
+  $("ovExit").addEventListener("click", function (e) { e.stopPropagation(); exitClean(); });
+  $("stage").addEventListener("click", function () {
+    if (!document.body.classList.contains("clean")) return;
+    var o = $("overlay");
+    if (o.classList.contains("show")) o.classList.remove("show"); else { o.classList.add("show"); armOverlayHide(); }
+  });
+  document.addEventListener("keydown", function (e) { if (e.key === "Escape") exitClean(); });
+
+  /* ===================== запись ролика ===================== */
+  var recState = "idle", rec = null, chunks = [], recStart = 0, recTick = null, recBlob = null, recUrl = null, recExt = "webm", recMime = "";
+  function pickMime() {
+    var list = ["video/mp4;codecs=avc1.42E01E,mp4a.40.2", "video/mp4", "video/webm;codecs=vp9,opus", "video/webm;codecs=vp8,opus", "video/webm"];
+    for (var i = 0; i < list.length; i++) { try { if (MediaRecorder.isTypeSupported(list[i])) return list[i]; } catch (e) {} }
+    return "";
+  }
+  function recReset() { recState = "idle"; $("rec").textContent = "Записать ролик"; $("rec").classList.remove("on"); }
+  $("rec").addEventListener("click", function () {
+    if (recState === "rec") { stopRec(); return; }
+    if (recState !== "idle") return;
+    if (typeof MediaRecorder === "undefined" || !cv.captureStream) { setStatus("Этот браузер не умеет записывать видео. Используйте запись экрана телефона и режим съёмки."); return; }
+    if (!hasFile && mode !== "mic") { setStatus("Сначала загрузите озвучку или включите микрофон."); return; }
+    try { ensureCtx(); } catch (e) {}
+    $("result").hidden = true;
+    recState = "count";
+    var n = 3; $("rec").textContent = "Старт через " + n;
+    var iv = setInterval(function () {
+      n--;
+      if (n > 0) $("rec").textContent = "Старт через " + n;
+      else { clearInterval(iv); beginRec(); }
+    }, 1000);
+  });
+  function beginRec() {
+    try {
+      recDrive = true; last = 0; step(performance.now());
+      ticker = startTicker(tick, 16);
+      var vs = rc.captureStream(30);
+      var tracks = vs.getVideoTracks();
+      if (recDest) tracks = tracks.concat(recDest.stream.getAudioTracks());
+      recMime = pickMime();
+      var opts = { videoBitsPerSecond: 8000000, audioBitsPerSecond: 192000 };
+      if (recMime) opts.mimeType = recMime;
+      rec = new MediaRecorder(new MediaStream(tracks), opts);
+    } catch (e) { recDrive = false; if (ticker) { ticker.stop(); ticker = null; } recReset(); setStatus("Не удалось начать запись: " + (e && e.message ? e.message : "ошибка")); return; }
+    chunks = [];
+    rec.ondataavailable = function (e) { if (e.data && e.data.size) chunks.push(e.data); };
+    rec.onstop = finishRec;
+    rec.start(1000);
+    recState = "rec"; recStart = performance.now();
+    $("rec").textContent = "Остановить запись"; $("rec").classList.add("on");
+    if (hasFile && !micStream) {
+      audio.currentTime = 0; outGain.gain.value = 1;
+      audio.play().then(function () { mode = "file"; }).catch(function () { setStatus("Не получилось запустить звук для записи."); });
+    }
+    recTick = setInterval(function () { setStatus("Идёт запись: " + fmt((performance.now() - recStart) / 1000) + ". Запись остановится сама, когда закончится озвучка."); }, 500);
+  }
+  function stopRec() {
+    if (recState !== "rec") return;
+    clearInterval(recTick);
+    try { rec.stop(); } catch (e) { recReset(); }
+    if (!audio.paused) audio.pause();
+  }
+  function finishRec() {
+    recDrive = false; if (ticker) { ticker.stop(); ticker = null; }
+    recReset();
+    var type = (rec && rec.mimeType) || recMime || "video/webm";
+    var blob = new Blob(chunks, { type: type });
+    if (!blob.size) { setStatus("Запись получилась пустой. Попробуйте ещё раз."); return; }
+    recBlob = blob; recExt = /mp4/.test(type) ? "mp4" : "webm";
+    if (recUrl) URL.revokeObjectURL(recUrl);
+    recUrl = URL.createObjectURL(blob);
+    $("preview").src = recUrl;
+    $("result").hidden = false;
+    $("recInfo").textContent = (blob.size / 1048576).toFixed(1) + " МБ, " + recExt + ", 1920×1080";
+    setStatus("Ролик записан. Проверьте превью и сохраните.");
+    try { $("result").scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
+  }
+  $("closeRec").addEventListener("click", function () { $("result").hidden = true; $("preview").removeAttribute("src"); });
+  $("saveRec").addEventListener("click", function () {
+    if (!recBlob) return;
+    var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
+    var name = "rasskazchik-" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + "." + recExt;
+    var use = window.claude && window.claude.use ? window.claude.use("downloads") : Promise.resolve(null);
+    Promise.resolve(use).then(function (dl) {
+      if (!dl) { setStatus("Кнопка сохранения здесь недоступна. Нажмите на видео и удерживайте, затем выберите «Сохранить»."); return; }
+      return dl.save({ filename: name, data: recBlob }).then(function (r) {
+        setStatus(r && r.status === "saved" ? "Файл сохранён: " + name : "Файл передан.");
+      });
+    }).catch(function (e) {
+      if (e && e.code === "declined") setStatus("Сохранение отменено.");
+      else setStatus("Не удалось сохранить файл" + (e && e.message ? ": " + e.message : "."));
+    });
+  });
+
+  /* ===================== главный цикл ===================== */
+  function rawLevel(now) {
+    if (mode === "test") {
+      var t = (now - testStart) / 1000;
+      if (t > 5) return 0;
+      var syl = Math.max(0, Math.sin(t * 9.5)) * (0.55 + 0.45 * Math.sin(t * 2.1 + 1));
+      return syl * (Math.sin(t * 1.3) > -0.7 ? 1 : 0.1) * 0.12;
+    }
+    if (!analyser) return 0;
+    var active = (mode === "mic") || (mode === "file" && !audio.paused);
+    if (!active) return 0;
+    analyser.getFloatTimeDomainData(buf);
+    var s = 0; for (var i = 0; i < buf.length; i++) s += buf[i] * buf[i];
+    return Math.sqrt(s / buf.length);
+  }
+
+  var man = { br: 1, bob: 0, tilt: 0, open: 0, h: 0, rx: 14, blink: 0, look: 0 };
+  var blinkAt = 2200, blinkEnd = 0, lookTarget = 0, lookAt = 4000, last = 0, lastT = 0;
+
+  // Отдельный холст для записи: рисуется по таймеру из воркера, поэтому не зависит от того,
+  // виден ли экран (браузер замораживает requestAnimationFrame у страницы вне видимой области).
+  var rc = document.createElement("canvas"); rc.width = 1920; rc.height = 1080;
+  var rg = rc.getContext("2d");
+  var recDrive = false, ticker = null;
+  function startTicker(fn, ms) {
+    try {
+      var url = URL.createObjectURL(new Blob(["setInterval(function(){postMessage(1)}," + ms + ")"], { type: "text/javascript" }));
+      var w = new Worker(url); w.onmessage = fn;
+      return { stop: function () { w.terminate(); URL.revokeObjectURL(url); } };
+    } catch (e) {
+      var id = setInterval(fn, ms);
+      return { stop: function () { clearInterval(id); } };
+    }
+  }
+  function tick() {
+    var now = performance.now();
+    if (!recDrive || now - last < 30) return;
+    last = now; step(now);
+  }
+  function frame(now) {
+    requestAnimationFrame(frame);
+    if (recDrive || now - last < 30) return;
+    last = now; step(now);
+  }
+  function step(now) {
+    var dt = Math.min(100, now - (lastT || now)); lastT = now;
+
+    var raw = rawLevel(now);
+    peakEnv = Math.max(peakEnv * 0.9993, raw, 0.015);
+    var norm = raw / peakEnv;
+    lvl += (norm - lvl) * (norm > lvl ? 0.6 : 0.22);
+    var s = +$("sens").value, thr = 0.32 - 0.027 * s;
+    var open = Math.pow(clamp((lvl - thr) / 0.6, 0, 1), 0.85);
+    man.open = open;
+    man.h = open * 22 * (0.88 + 0.12 * Math.sin(now * 0.021));
+    man.rx = 14 + open * 5;
+    man.bob = open * 1.6;
+    man.tilt = Math.sin(now * 0.0007) * 1.1 + open * 0.8 * Math.sin(now * 0.012);
+    man.br = 1 + Math.sin(now * 0.0016) * 0.004;
+    if (now > blinkAt && now > blinkEnd) { blinkEnd = now + 160; blinkAt = now + 2200 + Math.random() * 3600; }
+    var b = 0; if (now < blinkEnd) { var p = 1 - (blinkEnd - now) / 160; b = p < 0.5 ? p * 2 : (1 - p) * 2; }
+    man.blink = b;
+    if (now > lookAt) { lookTarget = Math.random() < 0.35 ? 4 : 0; lookAt = now + 1800 + Math.random() * 4000; }
+    man.look += (lookTarget - man.look) * 0.08;
+
+    if (fadeDir !== 0) {
+      fade += fadeDir * dt / 260;
+      if (fadeDir > 0 && fade >= 1) { fade = 1; cur = pending; buildBg(cur); ambSwitch(cur); fadeDir = -1; }
+      else if (fadeDir < 0 && fade <= 0) { fade = 0; fadeDir = 0; }
+    }
+
+    var c = recDrive ? rg : g;
+    c.setTransform(1, 0, 0, 1, 0, 0);
+    c.globalAlpha = 1; c.globalCompositeOperation = "source-over";
+    c.drawImage(bgc, 0, 0);
+    c.setTransform(SC, 0, 0, SC, 0, 0);
+    var L = LOCS[cur];
+    L.back(c, now);
+    drawMan(c, man);
+    L.front(c, now);
+    var vg = c.createRadialGradient(640, 360, 380, 640, 360, 760);
+    vg.addColorStop(0, "rgba(0,0,0,0)"); vg.addColorStop(1, "rgba(0,0,0,.72)");
+    c.fillStyle = vg; c.fillRect(0, 0, W, H);
+    if (fade > 0.001) { c.fillStyle = "rgba(0,0,0," + fade.toFixed(3) + ")"; c.fillRect(0, 0, W, H); }
+    if (recDrive) { g.setTransform(1, 0, 0, 1, 0, 0); g.globalAlpha = 1; g.globalCompositeOperation = "source-over"; g.drawImage(rc, 0, 0); }
+  }
+  requestAnimationFrame(frame);
+
+  function lightning() {
+    var n = 0;
+    (function pulse() {
+      if (n === 0) thunder();
+      S.flash = n % 2 === 0 ? 0.75 : 0.1; n++;
+      if (n < 4) setTimeout(pulse, 70 + Math.random() * 60);
+      else setTimeout(function () { S.flash = 0; }, 140);
+    })();
+    setTimeout(lightning, 14000 + Math.random() * 26000);
+  }
+  setTimeout(lightning, 9000);
+})();
+</script>

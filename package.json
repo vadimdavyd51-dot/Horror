@@ -1,0 +1,14 @@
+{
+  "name": "horror-storyteller",
+  "version": "1.0.0",
+  "description": "Мультяшный рассказчик хоррор-историй: 6 локаций со звуками, рот двигается под озвучку, запись ролика 1920x1080.",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "build": "node scripts/build.mjs",
+    "start": "node scripts/serve.mjs"
+  },
+  "engines": {
+    "node": ">=18"
+  }
+}
