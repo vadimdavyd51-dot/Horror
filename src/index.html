@@ -1355,42 +1355,66 @@ body.clean .overlay.show { display: flex; }
     try { $("result").scrollIntoView({ behavior: "smooth", block: "nearest" }); } catch (e) {}
   }
   $("closeRec").addEventListener("click", function () { $("result").hidden = true; $("preview").removeAttribute("src"); });
-  function isNative() { try { return !!(window.Capacitor && window.Capacitor.isNativePlatform && window.Capacitor.isNativePlatform()); } catch (e) { return false; } }
+  function note(t) { $("recInfo").textContent = t; setStatus(t); }
+  function capPlatform() { try { return window.Capacitor && window.Capacitor.getPlatform ? window.Capacitor.getPlatform() : "web"; } catch (e) { return "web"; } }
+  function isNative() { try { var C = window.Capacitor; if (!C) return false; if (C.isNativePlatform) return !!C.isNativePlatform(); return capPlatform() !== "web"; } catch (e) { return false; } }
   function toB64(buf) { var s = "", u = new Uint8Array(buf); for (var i = 0; i < u.length; i += 32768) s += String.fromCharCode.apply(null, u.subarray(i, i + 32768)); return btoa(s); }
-  function saveNative(blob, name) {
-    var FS = window.Capacitor.registerPlugin("Filesystem"), SH = window.Capacitor.registerPlugin("Share");
-    var CH = 3 * 1024 * 1024, pos = 0, uri = "";
-    setStatus("Готовлю файл…");
+  function errText(e) { return e && (e.message || e.errorMessage) ? String(e.message || e.errorMessage) : String(e || ""); }
+  function writeChunks(FS, blob, name, dir) {
+    var CH = 1024 * 1024, pos = 0, uri = "";
     function next() {
-      if (pos >= blob.size) return Promise.resolve();
+      if (pos >= blob.size) return Promise.resolve(uri);
       var part = blob.slice(pos, pos + CH), first = pos === 0; pos += CH;
+      note("Готовлю файл… " + Math.min(100, Math.round(pos / blob.size * 100)) + "%");
       return part.arrayBuffer().then(function (buf) {
-        var o = { path: name, data: toB64(buf), directory: "CACHE" };
+        var o = { path: name, data: toB64(buf), directory: dir };
         return first ? FS.writeFile(o).then(function (r) { uri = r.uri; }) : FS.appendFile(o);
       }).then(next);
     }
-    next().then(function () { return SH.share({ title: "Ролик «Рассказчик»", files: [uri], dialogTitle: "Сохранить или отправить ролик" }); })
-      .then(function () { setStatus("Готово. Выберите, куда сохранить ролик."); })
+    return next();
+  }
+  function saveNative(blob, name) {
+    var FS = window.Capacitor.registerPlugin("Filesystem"), SH = window.Capacitor.registerPlugin("Share");
+    note("Готовлю файл…");
+    writeChunks(FS, blob, name, "CACHE").then(function (uri) {
+      note("Открываю меню «Поделиться»…");
+      return SH.share({ title: "Ролик «Рассказчик»", files: [uri], dialogTitle: "Сохранить или отправить ролик" });
+    }).then(function () { note("Готово. Если выбрали «Сохранить», файл уже в телефоне."); })
       .catch(function (e) {
-        var m = e && e.message ? String(e.message) : "";
-        setStatus(/cancel/i.test(m) ? "Сохранение отменено." : "Не удалось сохранить файл" + (m ? ": " + m : "."));
+        var m = errText(e);
+        if (/cancel/i.test(m)) { note("Сохранение отменено."); return; }
+        note("Меню не открылось (" + m + "). Сохраняю в папку «Документы»…");
+        writeChunks(FS, blob, name, "DOCUMENTS").then(function () {
+          note("Сохранено в папку «Документы» на телефоне: " + name);
+        }).catch(function (e2) {
+          note("Не удалось сохранить: " + errText(e2) + ". Нажмите на видео выше и удерживайте — может появиться «Скачать».");
+        });
       });
   }
   $("saveRec").addEventListener("click", function () {
-    if (!recBlob) return;
-    if (isNative()) { saveNative(recBlob, "rasskazchik-" + Date.now() + "." + recExt); return; }
-    var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
-    var name = "rasskazchik-" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + "." + recExt;
-    var use = window.claude && window.claude.use ? window.claude.use("downloads") : Promise.resolve(null);
-    Promise.resolve(use).then(function (dl) {
-      if (!dl) { setStatus("Кнопка сохранения здесь недоступна. Нажмите на видео и удерживайте, затем выберите «Сохранить»."); return; }
-      return dl.save({ filename: name, data: recBlob }).then(function (r) {
-        setStatus(r && r.status === "saved" ? "Файл сохранён: " + name : "Файл передан.");
+    try {
+      if (!recBlob) { note("Ролика нет. Сначала запишите его."); return; }
+      note("Сохраняю… (" + capPlatform() + ")");
+      var d = new Date(), p = function (n) { return (n < 10 ? "0" : "") + n; };
+      var name = "rasskazchik-" + d.getFullYear() + p(d.getMonth() + 1) + p(d.getDate()) + "-" + p(d.getHours()) + p(d.getMinutes()) + p(d.getSeconds()) + "." + recExt;
+      if (isNative()) { saveNative(recBlob, name); return; }
+      var use = window.claude && window.claude.use ? window.claude.use("downloads") : Promise.resolve(null);
+      Promise.resolve(use).then(function (dl) {
+        if (!dl) {
+          try {
+            var a = document.createElement("a"); a.href = recUrl; a.download = name; document.body.appendChild(a); a.click(); a.remove();
+            note("Загрузка запущена: " + name + ". Если файла нет, нажмите на видео и удерживайте.");
+          } catch (e) { note("Кнопка сохранения здесь недоступна. Нажмите на видео и удерживайте."); }
+          return;
+        }
+        return dl.save({ filename: name, data: recBlob }).then(function (r) {
+          note(r && r.status === "saved" ? "Файл сохранён: " + name : "Файл передан.");
+        });
+      }).catch(function (e) {
+        if (e && e.code === "declined") note("Сохранение отменено.");
+        else note("Не удалось сохранить файл: " + errText(e));
       });
-    }).catch(function (e) {
-      if (e && e.code === "declined") setStatus("Сохранение отменено.");
-      else setStatus("Не удалось сохранить файл" + (e && e.message ? ": " + e.message : "."));
-    });
+    } catch (e) { note("Ошибка сохранения: " + errText(e)); }
   });
 
   /* ===================== главный цикл ===================== */
