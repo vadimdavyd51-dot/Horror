@@ -713,7 +713,7 @@ body.clean .overlay.show { display: flex; }
   var BAT_DUR = 5200;
   function batPos(b, u) {
     var x = b.dir > 0 ? -90 + u * 1460 : 1370 - u * 1460;
-    var y = b.y0 + 55 * Math.sin(u * TAU * b.freq + b.ph) + 40 * Math.sin(u * TAU * 0.5 + 1);
+    var y = b.y0 + 28 * Math.sin(u * TAU * b.freq + b.ph) + 18 * Math.sin(u * TAU * 0.5 + 1);
     return [x, y, 1.25 + 0.8 * Math.sin(u * Math.PI)];
   }
   function wing(c, A) {
@@ -731,7 +731,7 @@ body.clean .overlay.show { display: flex; }
     S.batSeen = t;
     if (!S.bat) {
       if (t < S.batNext) return;
-      S.bat = { id: (S.batId = (S.batId || 0) + 1), t0: t, dir: Math.random() < 0.5 ? 1 : -1, y0: 190 + Math.random() * 120, freq: 1.2 + Math.random() * 1.2, ph: Math.random() * TAU };
+      S.bat = { id: (S.batId = (S.batId || 0) + 1), t0: t, dir: Math.random() < 0.5 ? 1 : -1, y0: 85 + Math.random() * 40, freq: 1.2 + Math.random() * 1.2, ph: Math.random() * TAU };
     }
     var b = S.bat, u = (t - b.t0) / BAT_DUR;
     if (u >= 1) { S.bat = { done: true, id: b.id }; S.batNext = t + 11000 + Math.random() * 13000; return; }
@@ -1311,7 +1311,7 @@ body.clean .overlay.show { display: flex; }
         for (var k = 0; k * (1 / 9) < dur; k++) {
           var u = k / 9 / dur, tt = t0 + k / 9;
           if (tt < ctx.currentTime) continue;
-          var env = Math.pow(Math.sin(Math.PI * u), 1.6), v = 0.05 + 0.2 * env;
+          var env = Math.pow(Math.sin(Math.PI * u), 1.6), v = 0.02 + 0.075 * env;
           burst(dest, tt + 0.02, 0.07, v, "bandpass", rnd(900, 1500), 0.7);
           burst(dest, tt + 0.03, 0.05, v * 0.6, "lowpass", 380, 0.7);
         }
